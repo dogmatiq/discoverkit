@@ -1,10 +1,10 @@
-# GITHUB_REPO_NAME
+# discoverkit
 
-[![Build Status](https://github.com/dogmatiq/GITHUB_REPO_NAME/workflows/CI/badge.svg)](https://github.com/dogmatiq/GITHUB_REPO_NAME/actions?workflow=CI)
-[![Code Coverage](https://img.shields.io/codecov/c/github/dogmatiq/GITHUB_REPO_NAME/main.svg)](https://codecov.io/github/dogmatiq/GITHUB_REPO_NAME)
-[![Latest Version](https://img.shields.io/github/tag/dogmatiq/GITHUB_REPO_NAME.svg?label=semver)](https://semver.org)
-[![Documentation](https://img.shields.io/badge/go.dev-reference-007d9c)](https://pkg.go.dev/github.com/dogmatiq/GITHUB_REPO_NAME)
-[![Go Report Card](https://goreportcard.com/badge/github.com/dogmatiq/GITHUB_REPO_NAME)](https://goreportcard.com/report/github.com/dogmatiq/GITHUB_REPO_NAME)
+[![Build Status](https://github.com/dogmatiq/discoverkit/workflows/CI/badge.svg)](https://github.com/dogmatiq/discoverkit/actions?workflow=CI)
+[![Code Coverage](https://img.shields.io/codecov/c/github/dogmatiq/discoverkit/main.svg)](https://codecov.io/github/dogmatiq/discoverkit)
+[![Latest Version](https://img.shields.io/github/tag/dogmatiq/discoverkit.svg?label=semver)](https://semver.org)
+[![Documentation](https://img.shields.io/badge/go.dev-reference-007d9c)](https://pkg.go.dev/github.com/dogmatiq/discoverkit)
+[![Go Report Card](https://goreportcard.com/badge/github.com/dogmatiq/discoverkit)](https://goreportcard.com/report/github.com/dogmatiq/discoverkit)
 
 This repository is a template for Dogmatiq Go modules.
 
@@ -13,13 +13,13 @@ repository from this template.
 
 After creating a repository from this template, follow these steps:
 
-- On the settings page (https://github.com/dogmatiq/GITHUB_REPO_NAME/settings):
+- On the settings page (https://github.com/dogmatiq/discoverkit/settings):
   - Disable the "Wiki" feature
   - Enable "Automatically delete head branches" under the "Merge button" section
-- Replace the string `GITHUB_REPO_NAME` in all files with the actual repo name.
+- Replace the string `discoverkit` in all files with the actual repo name.
 - Add a secret named `CODECOV_TOKEN` containing the codecov.io token for the new repository.
-  - The secret is available [here](https://codecov.io/gh/dogmatiq/GITHUB_REPO_NAME/settings).
-  - And is configured [here](https://github.com/dogmatiq/GITHUB_REPO_NAME/settings/secrets)
+  - The secret is available [here](https://codecov.io/gh/dogmatiq/discoverkit/settings).
+  - And is configured [here](https://github.com/dogmatiq/discoverkit/settings/secrets)
 - Run the commands below to rename `.template` files to their proper names:
 
     ```
