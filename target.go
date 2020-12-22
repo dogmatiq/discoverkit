@@ -13,9 +13,9 @@ type Target struct {
 	// https://github.com/grpc/grpc/blob/master/doc/naming.md.
 	Name string
 
-	// Options is a set of grpc.DialOptions used when dialing this target.
+	// DialOptions is a set of grpc.DialOptions used when dialing this target.
 	//
 	// The options MUST NOT include grpc.WithBlock() or
 	// grpc.WithReturnConnectionError().
-	Options []grpc.DialOption
+	DialOptions []grpc.DialOption
 }
