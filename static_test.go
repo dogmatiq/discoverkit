@@ -33,7 +33,7 @@ var _ = Describe("type StaticDiscoverer", func() {
 		cancel()
 	})
 
-	Describe("func Run()", func() {
+	Describe("func Discover()", func() {
 		It("notifies the observer of discovery immediately", func() {
 			var targets []Target
 
