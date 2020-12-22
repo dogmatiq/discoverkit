@@ -22,9 +22,6 @@ type DiscoveredTarget struct {
 
 	// Discoverer is the discoverer that located this target.
 	Discoverer Discoverer
-
-	// MetaData contains additional discover-specific data about the target.
-	MetaData interface{}
 }
 
 var nextID uint64
