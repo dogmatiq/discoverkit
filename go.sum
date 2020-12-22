@@ -11,8 +11,8 @@ github.com/dogmatiq/dogma v0.10.0 h1:2kLivwq72nr6yF3/jpIA5U57IOmPRxeO+I9lE06IebE
 github.com/dogmatiq/dogma v0.10.0/go.mod h1:8TdjQ5jjV2DcCPb/jjHPgSrqU66H6092yMEIF5HGx0g=
 github.com/dogmatiq/iago v0.4.0 h1:57nZqVT34IZxtCZEW/RFif7DNUEjMXgevfr/Mmd0N8I=
 github.com/dogmatiq/iago v0.4.0/go.mod h1:fishMWBtzYcjgis6d873VTv9kFm/wHYLOzOyO9ECBDc=
-github.com/dogmatiq/interopspec v0.4.1-0.20201222202939-f015b4ed2f04 h1:IHLlCQK5zzq1LZXYsN4/wwHIAW9vW6PYj5lV/+5ZLvA=
-github.com/dogmatiq/interopspec v0.4.1-0.20201222202939-f015b4ed2f04/go.mod h1:QyLUtAn28bQLqOamapIEjJzA9YG3lBsk8fTKRE3NX5E=
+github.com/dogmatiq/interopspec v0.4.1-0.20201224041540-939b2195d70c h1:rZqr/l9H10MbGCGqhU+eDxbqU2JHhivRb+LbZWdXYjY=
+github.com/dogmatiq/interopspec v0.4.1-0.20201224041540-939b2195d70c/go.mod h1:QyLUtAn28bQLqOamapIEjJzA9YG3lBsk8fTKRE3NX5E=
 github.com/dogmatiq/linger v0.2.1 h1:ecVwiFlTcQuQ7ygQXH5bUPkWNve8n5BmVnCYMGMQ3zc=
 github.com/dogmatiq/linger v0.2.1/go.mod h1:vQPEiGNtb3Qy+1IdmdSMyLxr4d9vPChknnQkClQimGM=
 github.com/emicklei/dot v0.15.0/go.mod h1:DeV7GvQtIw4h2u73RKBkkFdvVAz0D9fzeJrgPW6gy/s=
