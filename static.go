@@ -6,8 +6,8 @@ import "context"
 // pre-configured targets.
 type StaticDiscoverer []Target
 
-// Discover notifies o of targets that are discovered (or "undiscovered")
-// until ctx is canceled or an error occurs.
+// Discover notifies o of targets that are discovered or undiscovered until ctx
+// is canceled or an error occurs.
 func (d StaticDiscoverer) Discover(ctx context.Context, o TargetObserver) error {
 	for _, t := range d {
 		dt := DiscoveredTarget{
