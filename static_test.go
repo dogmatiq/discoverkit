@@ -11,27 +11,21 @@ import (
 
 var _ = Describe("type StaticDiscoverer", func() {
 	var (
-		ctx              context.Context
-		cancel           context.CancelFunc
-		target1, target2 Target
-		obs              *targetObserverStub
-		disc             *StaticDiscoverer
+		ctx    context.Context
+		cancel context.CancelFunc
+		obs    *targetObserverStub
+		disc   StaticDiscoverer
 	)
 
 	BeforeEach(func() {
 		ctx, cancel = context.WithTimeout(context.Background(), 1*time.Second)
 		ctx, cancel = context.WithCancel(ctx)
 
-		target1 = Target{Name: "<target-1>"}
-		target2 = Target{Name: "<target-2>"}
-
 		obs = &targetObserverStub{}
 
-		disc = &StaticDiscoverer{
-			Targets: []Target{
-				target1,
-				target2,
-			},
+		disc = StaticDiscoverer{
+			{Name: "<target-1>"},
+			{Name: "<target-2>"},
 		}
 	})
 
@@ -49,7 +43,7 @@ var _ = Describe("type StaticDiscoverer", func() {
 
 				targets = append(targets, t.Target)
 
-				if len(targets) == len(disc.Targets) {
+				if len(targets) == len(disc) {
 					obs.TargetUndiscoveredFunc = nil
 					cancel()
 				}
@@ -61,7 +55,7 @@ var _ = Describe("type StaticDiscoverer", func() {
 
 			err := disc.Discover(ctx, obs)
 			Expect(err).To(Equal(context.Canceled))
-			Expect(targets).To(ConsistOf(disc.Targets))
+			Expect(targets).To(ConsistOf(disc))
 		})
 
 		It("notifies the observer of undiscovery when the discoverer is stopped", func() {
@@ -70,7 +64,7 @@ var _ = Describe("type StaticDiscoverer", func() {
 			obs.TargetDiscoveredFunc = func(t DiscoveredTarget) {
 				targets[t.ID] = t
 
-				if len(targets) == len(disc.Targets) {
+				if len(targets) == len(disc) {
 					cancel()
 				}
 			}
