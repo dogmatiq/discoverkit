@@ -29,7 +29,7 @@ type Connector struct {
 	// notified about them.
 	//
 	// If it is nil, no targets are ignored.
-	Ignore func(DiscoveredTarget) bool
+	Ignore func(*Target) bool
 
 	// OnDialError is a function that is called when a call to Dial() fails.
 	//
@@ -38,17 +38,17 @@ type Connector struct {
 	// the dialer returns.
 	//
 	// If it is nil, dialing errors are silently ignored.
-	OnDialError func(DiscoveredTarget, error)
+	OnDialError func(*Target, error)
 
 	m           sync.Mutex
-	connections map[uint64]*grpc.ClientConn
+	connections map[*Target]*grpc.ClientConn
 }
 
 // TargetDiscovered is called when a discoverer becomes aware of a target.
 //
 // It attempts to dial the target and if successful it notifies the observer of
 // the new connection.
-func (c *Connector) TargetDiscovered(t DiscoveredTarget) {
+func (c *Connector) TargetDiscovered(t *Target) {
 	if c.Ignore != nil && c.Ignore(t) {
 		return
 	}
@@ -66,8 +66,8 @@ func (c *Connector) TargetDiscovered(t DiscoveredTarget) {
 	defer c.m.Unlock()
 
 	if c.connections == nil {
-		c.connections = map[uint64]*grpc.ClientConn{}
-	} else if _, ok := c.connections[t.ID]; ok {
+		c.connections = map[*Target]*grpc.ClientConn{}
+	} else if _, ok := c.connections[t]; ok {
 		// This target has already been discovered. This should never occur but
 		// is added to account for misbehaving Discoverer implementations.
 		return
@@ -82,7 +82,7 @@ func (c *Connector) TargetDiscovered(t DiscoveredTarget) {
 		return
 	}
 
-	c.connections[t.ID] = conn
+	c.connections[t] = conn
 	c.Observer.ConnectionAvailable(t, conn)
 }
 
@@ -92,12 +92,12 @@ func (c *Connector) TargetDiscovered(t DiscoveredTarget) {
 // If a connection has been dialed for this target the observer is first
 // notified that the connection is no longer available and then the connection
 // is closed.
-func (c *Connector) TargetUndiscovered(t DiscoveredTarget) {
+func (c *Connector) TargetUndiscovered(t *Target) {
 	c.m.Lock()
 	defer c.m.Unlock()
 
-	if conn, ok := c.connections[t.ID]; ok {
-		delete(c.connections, t.ID)
+	if conn, ok := c.connections[t]; ok {
+		delete(c.connections, t)
 		c.Observer.ConnectionUnavailable(t, conn)
 		conn.Close()
 	}
@@ -108,9 +108,9 @@ func (c *Connector) TargetUndiscovered(t DiscoveredTarget) {
 type ConnectionObserver interface {
 	// ConnectionAvailable is called when a connection to a target becomes
 	// available.
-	ConnectionAvailable(DiscoveredTarget, grpc.ClientConnInterface)
+	ConnectionAvailable(*Target, grpc.ClientConnInterface)
 
 	// ConnectionUnavailable is called when a connection to a target becomes
 	// unavailable.
-	ConnectionUnavailable(DiscoveredTarget, grpc.ClientConnInterface)
+	ConnectionUnavailable(*Target, grpc.ClientConnInterface)
 }

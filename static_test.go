@@ -35,13 +35,10 @@ var _ = Describe("type StaticDiscoverer", func() {
 
 	Describe("func Discover()", func() {
 		It("notifies the observer of discovery immediately", func() {
-			var targets []Target
+			var targets []*Target
 
-			obs.TargetDiscoveredFunc = func(t DiscoveredTarget) {
-				Expect(t.ID).To(BeNumerically(">", 0))
-				Expect(t.Discoverer).To(Equal(disc))
-
-				targets = append(targets, t.Target)
+			obs.TargetDiscoveredFunc = func(t *Target) {
+				targets = append(targets, t)
 
 				if len(targets) == len(disc) {
 					obs.TargetUndiscoveredFunc = nil
@@ -49,7 +46,7 @@ var _ = Describe("type StaticDiscoverer", func() {
 				}
 			}
 
-			obs.TargetUndiscoveredFunc = func(t DiscoveredTarget) {
+			obs.TargetUndiscoveredFunc = func(*Target) {
 				Fail("observer unexpectedly notified of target unavailability")
 			}
 
@@ -59,20 +56,20 @@ var _ = Describe("type StaticDiscoverer", func() {
 		})
 
 		It("notifies the observer of undiscovery when the discoverer is stopped", func() {
-			targets := map[uint64]DiscoveredTarget{}
+			targets := map[*Target]struct{}{}
 
-			obs.TargetDiscoveredFunc = func(t DiscoveredTarget) {
-				targets[t.ID] = t
+			obs.TargetDiscoveredFunc = func(t *Target) {
+				targets[t] = struct{}{}
 
 				if len(targets) == len(disc) {
 					cancel()
 				}
 			}
 
-			obs.TargetUndiscoveredFunc = func(t DiscoveredTarget) {
-				x := targets[t.ID]
-				Expect(t).To(Equal(x))
-				delete(targets, t.ID)
+			obs.TargetUndiscoveredFunc = func(t *Target) {
+				_, ok := targets[t]
+				Expect(ok).To(BeTrue())
+				delete(targets, t)
 			}
 
 			err := disc.Discover(ctx, obs)
