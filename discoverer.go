@@ -2,27 +2,49 @@ package discoverkit
 
 import (
 	"context"
+	"fmt"
 )
 
 // Discoverer is an interface for services that discover gRPC Targets.
 type Discoverer interface {
-	// Discover notifies o of targets that are discovered or undiscovered
-	// until ctx is canceled or an error occurs.
-	Discover(ctx context.Context, o TargetObserver) error
+	// Discover invokes o.TargetDiscovered() when a new target is discovered.
+	//
+	// Each invocation is made on its own goroutine. The context passed to
+	// o.TargetDiscovered() is canceled when the target is "undiscovered", or
+	// the discoverer itself is stopped due to cancelation of ctx.
+	//
+	// The discoverer stops and returns a DiscoverObserverError if any call to
+	// o.TargetDiscovered() returns a non-nil error.
+	Discover(ctx context.Context, o DiscoverObserver) error
 }
 
-// TargetObserver is notified when a target is discovered or undiscovered.
-type TargetObserver interface {
-	// TargetDiscovered is called when a discoverer becomes aware of a target.
+// DiscoverObserver is an interface for types that accept notifications about
+// target discovery.
+type DiscoverObserver interface {
+	// TargetDiscovered is called when a new target is discovered.
 	//
-	// The target is not necessarily online, or if it is online, not necessarily
-	// available to serve requests.
-	TargetDiscovered(*Target)
+	// ctx is canceled if the target is undiscovered while TargetDiscovered() is
+	// still executing.
+	TargetDiscovered(ctx context.Context, t Target) error
+}
 
-	// TargetUndiscovered is called when a previously discovered target is no
-	// longer considered to exist.
-	//
-	// t must have previously been passed to TargetDiscovered. That is, the
-	// pointer address itself.
-	TargetUndiscovered(*Target)
+// DiscoverObserverError indicates that a discoverer was stopped because a
+// DiscoverObserver produced an error.
+type DiscoverObserverError struct {
+	Discoverer Discoverer
+	Observer   DiscoverObserver
+	Target     Target
+	Cause      error
+}
+
+func (e DiscoverObserverError) Unwrap() error {
+	return e.Cause
+}
+
+func (e DiscoverObserverError) Error() string {
+	return fmt.Sprintf(
+		"observing %s target: %s",
+		e.Target.Name,
+		e.Cause,
+	)
 }

@@ -1,32 +1,21 @@
 package discoverkit_test
 
 import (
-	"sync"
+	"context"
 
 	. "github.com/dogmatiq/discoverkit"
 )
 
-// targetObserverStub is a test implementation of the TargetObserver interface.
-type targetObserverStub struct {
-	m                      sync.Mutex
-	TargetDiscoveredFunc   func(*Target)
-	TargetUndiscoveredFunc func(*Target)
+// discoverObserverStub is a test implementation of the TargetObserver interface.
+type discoverObserverStub struct {
+	TargetDiscoveredFunc func(context.Context, Target) error
 }
 
-// TargetDiscovered calls o.TargetDiscoveredFunc(t) if it is non-nil.
-func (o *targetObserverStub) TargetDiscovered(t *Target) {
+// TargetDiscovered calls o.TargetDiscoveredFunc(ctx, t) if it is non-nil.
+func (o *discoverObserverStub) TargetDiscovered(ctx context.Context, t Target) error {
 	if o.TargetDiscoveredFunc != nil {
-		o.m.Lock()
-		defer o.m.Unlock()
-		o.TargetDiscoveredFunc(t)
+		return o.TargetDiscoveredFunc(ctx, t)
 	}
-}
 
-// TargetUndiscovered calls o.TargetUndiscoveredFunc(t) if it is non-nil.
-func (o *targetObserverStub) TargetUndiscovered(t *Target) {
-	if o.TargetUndiscoveredFunc != nil {
-		o.m.Lock()
-		defer o.m.Unlock()
-		o.TargetUndiscoveredFunc(t)
-	}
+	return nil
 }
