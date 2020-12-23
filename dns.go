@@ -28,23 +28,25 @@ type DNSDiscoverer struct {
 	// QueryHost is the hostname that is queried.
 	QueryHost string
 
-	// NewTargets returns the targets that are discovered based on the discover
-	// of a network address.
+	// NewTargets returns the targets that are discovered based on the addition
+	// of a new network address to the DNS query result.
 	//
 	// addr is the address discovered by the DNS query. It may be a hostname or
 	// an IP address.
 	//
-	// If NewTargets is nil the discover constructs a single Target for each
+	// If NewTargets is nil the discoverer constructs a single Target for each
 	// discovered address. The target name is the discovered address and no
 	// explicit port is specified.
 	NewTargets func(ctx context.Context, addr string) (targets []Target, err error)
 
-	// Resolver is the DNS resolver used to make queries. If it is nil
-	// net.DefaultResolver is used.
+	// Resolver is the DNS resolver used to make queries.
+	//
+	// If it is nil, net.DefaultResolver is used.
 	Resolver DNSResolver
 
-	// QueryInterval is the interval at which DNS queries are performed. If it
-	// is non-positive the DefaultDNSQueryInterval constant is used.
+	// QueryInterval is the interval at which DNS queries are performed.
+	//
+	// If it is non-positive, the DefaultDNSQueryInterval constant is used.
 	QueryInterval time.Duration
 
 	// targets is the set of targets currently known to the discoverer.
