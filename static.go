@@ -2,7 +2,7 @@ package discoverkit
 
 import "context"
 
-// StaticDiscoverer is a Discoverer that always "discovers" a fixed set of of
+// StaticDiscoverer is a Discoverer that always "discovers" a fixed set of
 // pre-configured targets.
 type StaticDiscoverer []Target
 
