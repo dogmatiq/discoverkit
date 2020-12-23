@@ -37,7 +37,7 @@ type DNSDiscoverer struct {
 	// If NewTargets is nil the discoverer constructs a single Target for each
 	// discovered address. The target name is the discovered address and no
 	// explicit port is specified.
-	NewTargets func(ctx context.Context, addr string) (targets []Target, err error)
+	NewTargets func(ctx context.Context, addr string) (targets []*Target, err error)
 
 	// Resolver is the DNS resolver used to make queries.
 	//
@@ -50,7 +50,7 @@ type DNSDiscoverer struct {
 	QueryInterval time.Duration
 
 	// targets is the set of targets currently known to the discoverer.
-	targets map[string][]DiscoveredTarget
+	targets map[string][]*Target
 }
 
 // Discover notifies o of targets that are discovered or undiscovered until ctx
@@ -92,7 +92,7 @@ func (d *DNSDiscoverer) update(
 	o TargetObserver,
 ) error {
 	prev := d.targets
-	d.targets = make(map[string][]DiscoveredTarget, len(addrs))
+	d.targets = make(map[string][]*Target, len(addrs))
 
 	// Add an entry to d.targets for each of the addresses in the query result.
 	for _, addr := range addrs {
@@ -111,28 +111,15 @@ func (d *DNSDiscoverer) update(
 			return err
 		}
 
-		if len(targets) == 0 {
-			// Explicitly store a nil slice against this address if there are no
-			// targets. This ensures that we still treat the address as "seen".
-			d.targets[addr] = nil
-			continue
-		}
-
-		// Make a DiscoveredTarget for each Target and notify the observer.
-		discovered := make([]DiscoveredTarget, len(targets))
-		for i, t := range targets {
-			dt := DiscoveredTarget{
-				Target:     t,
-				ID:         DiscoveredTargetID(),
-				Discoverer: d,
-			}
-
-			discovered[i] = dt
-			o.TargetDiscovered(dt)
+		// Notify the observer of the targets.
+		for _, t := range targets {
+			o.TargetDiscovered(t)
 		}
 
 		// Store the discovered targets against the address.
-		d.targets[addr] = discovered
+		// Note that we still store a nil or empty slice against this
+		// address. This ensures that we still treat the address as "seen".
+		d.targets[addr] = targets
 	}
 
 	// Notify the observer of any targets that have gone away because the
@@ -170,12 +157,12 @@ func (d *DNSDiscoverer) query(ctx context.Context) ([]string, error) {
 }
 
 // newTarget returns the targets at the given address.
-func (d *DNSDiscoverer) newTargets(ctx context.Context, addr string) ([]Target, error) {
+func (d *DNSDiscoverer) newTargets(ctx context.Context, addr string) ([]*Target, error) {
 	if d.NewTargets != nil {
 		return d.NewTargets(ctx, addr)
 	}
 
-	return []Target{
+	return []*Target{
 		{Name: addr},
 	}, nil
 }

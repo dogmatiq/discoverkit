@@ -12,30 +12,24 @@ import (
 
 var _ = Describe("type Connector", func() {
 	var (
-		target1, target2 DiscoveredTarget
+		target1, target2 *Target
 		obs              *connectionObserverStub
 		connector        *Connector
 	)
 
 	BeforeEach(func() {
-		target1 = DiscoveredTarget{
-			Target: Target{
-				Name: "<target-1>",
-				DialOptions: []grpc.DialOption{
-					grpc.WithInsecure(),
-				},
+		target1 = &Target{
+			Name: "<target-1>",
+			DialOptions: []grpc.DialOption{
+				grpc.WithInsecure(),
 			},
-			ID: DiscoveredTargetID(),
 		}
 
-		target2 = DiscoveredTarget{
-			Target: Target{
-				Name: "<target-2>",
-				DialOptions: []grpc.DialOption{
-					grpc.WithInsecure(),
-				},
+		target2 = &Target{
+			Name: "<target-2>",
+			DialOptions: []grpc.DialOption{
+				grpc.WithInsecure(),
 			},
-			ID: DiscoveredTargetID(),
 		}
 
 		obs = &connectionObserverStub{}
@@ -49,7 +43,7 @@ var _ = Describe("type Connector", func() {
 		It("notifies the observer of connection availability", func() {
 			called := false
 			obs.ConnectionAvailableFunc = func(
-				t DiscoveredTarget,
+				t *Target,
 				conn grpc.ClientConnInterface,
 			) {
 				Expect(t).To(Equal(target1))
@@ -66,7 +60,7 @@ var _ = Describe("type Connector", func() {
 			connector.TargetDiscovered(target1)
 
 			obs.ConnectionAvailableFunc = func(
-				DiscoveredTarget,
+				*Target,
 				grpc.ClientConnInterface,
 			) {
 				Fail("unexpected call")
@@ -77,15 +71,15 @@ var _ = Describe("type Connector", func() {
 
 		When("there is an ignore predicate", func() {
 			BeforeEach(func() {
-				connector.Ignore = func(t DiscoveredTarget) bool {
-					return t.ID == target1.ID
+				connector.Ignore = func(t *Target) bool {
+					return t == target1
 				}
 			})
 
 			It("notifies the observer if the target is not ignored", func() {
 				called := false
 				obs.ConnectionAvailableFunc = func(
-					t DiscoveredTarget,
+					t *Target,
 					_ grpc.ClientConnInterface,
 				) {
 					Expect(t).To(Equal(target2))
@@ -99,7 +93,7 @@ var _ = Describe("type Connector", func() {
 
 			It("does not notify the observer if the target is ignored", func() {
 				obs.ConnectionAvailableFunc = func(
-					DiscoveredTarget,
+					*Target,
 					grpc.ClientConnInterface,
 				) {
 					Fail("unexpected call")
@@ -118,7 +112,7 @@ var _ = Describe("type Connector", func() {
 
 			It("ignores the error", func() {
 				obs.ConnectionAvailableFunc = func(
-					DiscoveredTarget,
+					*Target,
 					grpc.ClientConnInterface,
 				) {
 					Fail("unexpected call")
@@ -130,7 +124,7 @@ var _ = Describe("type Connector", func() {
 			It("invokes the OnDialError() function if it is present", func() {
 				called := false
 				connector.OnDialError = func(
-					t DiscoveredTarget,
+					t *Target,
 					err error,
 				) {
 					Expect(t).To(Equal(target1))
@@ -151,7 +145,7 @@ var _ = Describe("type Connector", func() {
 
 			called := false
 			obs.ConnectionUnavailableFunc = func(
-				t DiscoveredTarget,
+				t *Target,
 				conn grpc.ClientConnInterface,
 			) {
 				Expect(t).To(Equal(target1))
@@ -170,12 +164,12 @@ var _ = Describe("type Connector", func() {
 // interface.
 type connectionObserverStub struct {
 	m                         sync.Mutex
-	ConnectionAvailableFunc   func(DiscoveredTarget, grpc.ClientConnInterface)
-	ConnectionUnavailableFunc func(DiscoveredTarget, grpc.ClientConnInterface)
+	ConnectionAvailableFunc   func(*Target, grpc.ClientConnInterface)
+	ConnectionUnavailableFunc func(*Target, grpc.ClientConnInterface)
 }
 
 // ConnectionAvailable calls o.ConnectionAvailableFunc(t,conn) if it is non-nil.
-func (o *connectionObserverStub) ConnectionAvailable(t DiscoveredTarget, c grpc.ClientConnInterface) {
+func (o *connectionObserverStub) ConnectionAvailable(t *Target, c grpc.ClientConnInterface) {
 	if o.ConnectionAvailableFunc != nil {
 		o.m.Lock()
 		defer o.m.Unlock()
@@ -184,7 +178,7 @@ func (o *connectionObserverStub) ConnectionAvailable(t DiscoveredTarget, c grpc.
 }
 
 // ConnectionUnavailable calls o.ConnectionUnavailableFunc(t,conn) if it is non-nil.
-func (o *connectionObserverStub) ConnectionUnavailable(t DiscoveredTarget, c grpc.ClientConnInterface) {
+func (o *connectionObserverStub) ConnectionUnavailable(t *Target, c grpc.ClientConnInterface) {
 	if o.ConnectionUnavailableFunc != nil {
 		o.m.Lock()
 		defer o.m.Unlock()

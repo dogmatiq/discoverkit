@@ -47,23 +47,16 @@ var _ = Describe("type DNSDiscoverer", func() {
 				return []string{"<addr-1>", "<addr-2>"}, nil
 			}
 
-			var targets []Target
-			obs.TargetDiscoveredFunc = func(t DiscoveredTarget) {
-				Expect(t.ID).To(BeNumerically(">", 0))
-				Expect(t.Discoverer).To(Equal(disc))
-
-				targets = append(targets, t.Target)
+			var targets []*Target
+			obs.TargetDiscoveredFunc = func(t *Target) {
+				targets = append(targets, t)
 			}
 
 			err := disc.Discover(ctx, obs)
 			Expect(err).To(Equal(context.Canceled))
 			Expect(targets).To(ConsistOf(
-				Target{
-					Name: "<addr-1>",
-				},
-				Target{
-					Name: "<addr-2>",
-				},
+				&Target{Name: "<addr-1>"},
+				&Target{Name: "<addr-2>"},
 			))
 		})
 
@@ -80,11 +73,9 @@ var _ = Describe("type DNSDiscoverer", func() {
 				return []string{"<addr-1>", "<addr-2>"}, nil
 			}
 
-			obs.TargetUndiscoveredFunc = func(t DiscoveredTarget) {
-				Expect(t.Target).To(Equal(
-					Target{
-						Name: "<addr-1>",
-					},
+			obs.TargetUndiscoveredFunc = func(t *Target) {
+				Expect(t).To(Equal(
+					&Target{Name: "<addr-1>"},
 				))
 
 				// Remove this function from the stub to prevent a failure when
@@ -106,16 +97,16 @@ var _ = Describe("type DNSDiscoverer", func() {
 				return []string{"<addr-1>", "<addr-2>"}, nil
 			}
 
-			targets := map[uint64]DiscoveredTarget{}
+			targets := map[*Target]struct{}{}
 
-			obs.TargetDiscoveredFunc = func(t DiscoveredTarget) {
-				targets[t.ID] = t
+			obs.TargetDiscoveredFunc = func(t *Target) {
+				targets[t] = struct{}{}
 			}
 
-			obs.TargetUndiscoveredFunc = func(t DiscoveredTarget) {
-				x := targets[t.ID]
-				Expect(t).To(Equal(x))
-				delete(targets, t.ID)
+			obs.TargetUndiscoveredFunc = func(t *Target) {
+				_, ok := targets[t]
+				Expect(ok).To(BeTrue())
+				delete(targets, t)
 			}
 
 			err := disc.Discover(ctx, obs)
@@ -127,7 +118,7 @@ var _ = Describe("type DNSDiscoverer", func() {
 			disc.QueryHost = "localhost"
 			disc.Resolver = nil
 
-			obs.TargetDiscoveredFunc = func(t DiscoveredTarget) {
+			obs.TargetDiscoveredFunc = func(t *Target) {
 				cancel()
 
 				Expect(t.Name).To(
@@ -144,8 +135,8 @@ var _ = Describe("type DNSDiscoverer", func() {
 
 		When("there is a NewTargets() function", func() {
 			It("uses the targets returned by NewTargets()", func() {
-				disc.NewTargets = func(_ context.Context, addr string) ([]Target, error) {
-					return []Target{
+				disc.NewTargets = func(_ context.Context, addr string) ([]*Target, error) {
+					return []*Target{
 						{Name: addr + "-A"},
 						{Name: addr + "-B"},
 					}, nil
@@ -156,36 +147,28 @@ var _ = Describe("type DNSDiscoverer", func() {
 					return []string{"<addr-1>", "<addr-2>"}, nil
 				}
 
-				var targets []Target
-				obs.TargetDiscoveredFunc = func(t DiscoveredTarget) {
-					targets = append(targets, t.Target)
+				var targets []*Target
+				obs.TargetDiscoveredFunc = func(t *Target) {
+					targets = append(targets, t)
 				}
 
 				err := disc.Discover(ctx, obs)
 				Expect(err).To(Equal(context.Canceled))
 				Expect(targets).To(ConsistOf(
-					Target{
-						Name: "<addr-1>-A",
-					},
-					Target{
-						Name: "<addr-1>-B",
-					},
-					Target{
-						Name: "<addr-2>-A",
-					},
-					Target{
-						Name: "<addr-2>-B",
-					},
+					&Target{Name: "<addr-1>-A"},
+					&Target{Name: "<addr-1>-B"},
+					&Target{Name: "<addr-2>-A"},
+					&Target{Name: "<addr-2>-B"},
 				))
 			})
 
 			It("properly tracks addresses for which NewTargets() returns an empty slice", func() {
 				disc.QueryInterval = 10 * time.Millisecond
 
-				disc.NewTargets = func(context.Context, string) ([]Target, error) {
+				disc.NewTargets = func(context.Context, string) ([]*Target, error) {
 					// Replace this function on the stub to ensure that it
 					// doesn't get called again for the same address.
-					disc.NewTargets = func(context.Context, string) ([]Target, error) {
+					disc.NewTargets = func(context.Context, string) ([]*Target, error) {
 						Fail("unexpected second invocation of NewTargets()")
 						return nil, nil
 					}
@@ -209,7 +192,7 @@ var _ = Describe("type DNSDiscoverer", func() {
 					return []string{"<addr>"}, nil
 				}
 
-				obs.TargetDiscoveredFunc = func(t DiscoveredTarget) {
+				obs.TargetDiscoveredFunc = func(*Target) {
 					Fail("unexpoected notification of discovered target")
 				}
 
@@ -218,7 +201,7 @@ var _ = Describe("type DNSDiscoverer", func() {
 			})
 
 			It("returns an error if NewTargets() returns an error", func() {
-				disc.NewTargets = func(context.Context, string) ([]Target, error) {
+				disc.NewTargets = func(context.Context, string) ([]*Target, error) {
 					return nil, errors.New("<error>")
 				}
 
