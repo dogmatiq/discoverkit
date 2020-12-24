@@ -6,5 +6,6 @@ require (
 	github.com/dogmatiq/linger v0.2.1
 	github.com/onsi/ginkgo v1.14.2
 	github.com/onsi/gomega v1.10.4
+	golang.org/x/sync v0.0.0-20190423024810-112230192c58
 	google.golang.org/grpc v1.34.0
 )
