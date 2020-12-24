@@ -6,9 +6,9 @@ import (
 	"google.golang.org/grpc"
 )
 
-// Connector is a DiscoverObserver implementation that dials each discovered
-// target and notifies a ConnectObserver when connections become available or
-// unavailable.
+// A Connector establishes connections to discovered gRPC targets.
+//
+// It implements the DiscoverObserver and forwards to a ConnectObserver.
 type Connector struct {
 	// Observer is the observer to notify about gRPC connections.
 	Observer ConnectObserver

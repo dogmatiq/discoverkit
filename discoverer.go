@@ -3,9 +3,15 @@ package discoverkit
 import (
 	"context"
 	"fmt"
+
+	"google.golang.org/grpc"
 )
 
-// Discoverer is an interface for services that discover gRPC Targets.
+// Discoverer is an interface for services that discover gRPC targets.
+//
+// A "target" is some endpoint that can be dialed using gRPC. It is typically a
+// single gRPC server, but may be anything that can be referred to by a "name"
+// as defined in https://github.com/grpc/grpc/blob/master/doc/naming.md.
 type Discoverer interface {
 	// Discover invokes o.TargetDiscovered() when a new target is discovered.
 	//
@@ -16,6 +22,19 @@ type Discoverer interface {
 	// The discoverer stops and returns a DiscoverObserverError if any call to
 	// o.TargetDiscovered() returns a non-nil error.
 	Discover(ctx context.Context, o DiscoverObserver) error
+}
+
+// Target represents some dialable gRPC target, typically a single gRPC server.
+type Target struct {
+	// Name is the target name used to dial the target.
+	//
+	// Typically this is the hostname and port of a single gRPC server but it
+	// may use any of the naming schemes defined in
+	// https://github.com/grpc/grpc/blob/master/doc/naming.md.
+	Name string
+
+	// DialOptions is a set of grpc.DialOptions used when dialing this target.
+	DialOptions []grpc.DialOption
 }
 
 // DiscoverObserver is an interface for handling the discovery of a target.
