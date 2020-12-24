@@ -1,8 +1,8 @@
 package discoverkit_test
 
 import (
+	"context"
 	"errors"
-	"sync"
 
 	. "github.com/dogmatiq/discoverkit"
 	. "github.com/onsi/ginkgo"
@@ -12,27 +12,27 @@ import (
 
 var _ = Describe("type Connector", func() {
 	var (
-		target1, target2 *Target
-		obs              *connectionObserverStub
+		target1, target2 Target
+		obs              *connectObserverStub
 		connector        *Connector
 	)
 
 	BeforeEach(func() {
-		target1 = &Target{
+		target1 = Target{
 			Name: "<target-1>",
 			DialOptions: []grpc.DialOption{
 				grpc.WithInsecure(),
 			},
 		}
 
-		target2 = &Target{
+		target2 = Target{
 			Name: "<target-2>",
 			DialOptions: []grpc.DialOption{
 				grpc.WithInsecure(),
 			},
 		}
 
-		obs = &connectionObserverStub{}
+		obs = &connectObserverStub{}
 
 		connector = &Connector{
 			Observer: obs,
@@ -40,148 +40,102 @@ var _ = Describe("type Connector", func() {
 	})
 
 	Describe("func TargetDiscovered()", func() {
-		It("notifies the observer of connection availability", func() {
-			called := false
-			obs.ConnectionAvailableFunc = func(
-				t *Target,
+		It("invokes the observer", func() {
+			obs.TargetConnectedFunc = func(
+				ctx context.Context,
+				t Target,
 				conn grpc.ClientConnInterface,
-			) {
+			) error {
 				Expect(t).To(Equal(target1))
 				Expect(conn).NotTo(BeNil())
-				called = true
+				return errors.New("<error>")
 			}
 
-			connector.TargetDiscovered(target1)
-
-			Expect(called).To(BeTrue())
-		})
-
-		It("does not notify the observer if the target has already been discovered", func() {
-			connector.TargetDiscovered(target1)
-
-			obs.ConnectionAvailableFunc = func(
-				*Target,
-				grpc.ClientConnInterface,
-			) {
-				Fail("unexpected call")
-			}
-
-			connector.TargetDiscovered(target1)
+			err := connector.TargetDiscovered(
+				context.Background(),
+				target1,
+			)
+			Expect(err).To(MatchError("<error>"))
 		})
 
 		When("there is an ignore predicate", func() {
 			BeforeEach(func() {
-				connector.Ignore = func(t *Target) bool {
-					return t == target1
+				connector.Ignore = func(t Target) bool {
+					return t.Name == target1.Name
 				}
 			})
 
-			It("notifies the observer if the target is not ignored", func() {
-				called := false
-				obs.ConnectionAvailableFunc = func(
-					t *Target,
+			It("invokes the observer if the target is not ignored", func() {
+				obs.TargetConnectedFunc = func(
+					ctx context.Context,
+					t Target,
 					_ grpc.ClientConnInterface,
-				) {
-					Expect(t).To(Equal(target2))
-					called = true
+				) error {
+					return errors.New("<error>")
 				}
 
-				connector.TargetDiscovered(target2)
-
-				Expect(called).To(BeTrue())
+				err := connector.TargetDiscovered(
+					context.Background(),
+					target2,
+				)
+				Expect(err).To(MatchError("<error>"))
 			})
 
-			It("does not notify the observer if the target is ignored", func() {
-				obs.ConnectionAvailableFunc = func(
-					*Target,
-					grpc.ClientConnInterface,
-				) {
-					Fail("unexpected call")
+			It("does not invoke the observer if the target is ignored", func() {
+				obs.TargetConnectedFunc = func(
+					ctx context.Context,
+					t Target,
+					_ grpc.ClientConnInterface,
+				) error {
+					return errors.New("unexpected call")
 				}
 
-				connector.TargetDiscovered(target1)
+				err := connector.TargetDiscovered(
+					context.Background(),
+					target1,
+				)
+				Expect(err).ShouldNot(HaveOccurred())
 			})
 		})
 
-		When("dialing fails", func() {
+		When("the dialer returns an error", func() {
 			BeforeEach(func() {
 				connector.Dial = func(string, ...grpc.DialOption) (*grpc.ClientConn, error) {
 					return nil, errors.New("<error>")
 				}
 			})
 
-			It("ignores the error", func() {
-				obs.ConnectionAvailableFunc = func(
-					*Target,
-					grpc.ClientConnInterface,
-				) {
+			It("returns the error without invoking the observer", func() {
+				obs.TargetConnectedFunc = func(
+					ctx context.Context,
+					t Target,
+					_ grpc.ClientConnInterface,
+				) error {
 					Fail("unexpected call")
+					return nil
 				}
 
-				connector.TargetDiscovered(target1)
+				err := connector.TargetDiscovered(
+					context.Background(),
+					target1,
+				)
+				Expect(err).To(MatchError("<error>"))
 			})
-
-			It("invokes the OnDialError() function if it is present", func() {
-				called := false
-				connector.OnDialError = func(
-					t *Target,
-					err error,
-				) {
-					Expect(t).To(Equal(target1))
-					Expect(err).To(MatchError("<error>"))
-					called = true
-				}
-
-				connector.TargetDiscovered(target1)
-
-				Expect(called).To(BeTrue())
-			})
-		})
-	})
-
-	Describe("func TargetUndiscovered()", func() {
-		It("notifies the observer of connection unavailability", func() {
-			connector.TargetDiscovered(target1)
-
-			called := false
-			obs.ConnectionUnavailableFunc = func(
-				t *Target,
-				conn grpc.ClientConnInterface,
-			) {
-				Expect(t).To(Equal(target1))
-				Expect(conn).NotTo(BeNil())
-				called = true
-			}
-
-			connector.TargetUndiscovered(target1)
-
-			Expect(called).To(BeTrue())
 		})
 	})
 })
 
-// connectionObserverStub is a test implementation of the ConnectionObserver
+// connectObserverStub is a test implementation of the ConnectObserver
 // interface.
-type connectionObserverStub struct {
-	m                         sync.Mutex
-	ConnectionAvailableFunc   func(*Target, grpc.ClientConnInterface)
-	ConnectionUnavailableFunc func(*Target, grpc.ClientConnInterface)
+type connectObserverStub struct {
+	TargetConnectedFunc func(context.Context, Target, grpc.ClientConnInterface) error
 }
 
-// ConnectionAvailable calls o.ConnectionAvailableFunc(t,conn) if it is non-nil.
-func (o *connectionObserverStub) ConnectionAvailable(t *Target, c grpc.ClientConnInterface) {
-	if o.ConnectionAvailableFunc != nil {
-		o.m.Lock()
-		defer o.m.Unlock()
-		o.ConnectionAvailableFunc(t, c)
+// TargetConnected calls o.ConnectionAvailableFunc(ctx,t,conn) if it is non-nil.
+func (o *connectObserverStub) TargetConnected(ctx context.Context, t Target, c grpc.ClientConnInterface) error {
+	if o.TargetConnectedFunc != nil {
+		return o.TargetConnectedFunc(ctx, t, c)
 	}
-}
 
-// ConnectionUnavailable calls o.ConnectionUnavailableFunc(t,conn) if it is non-nil.
-func (o *connectionObserverStub) ConnectionUnavailable(t *Target, c grpc.ClientConnInterface) {
-	if o.ConnectionUnavailableFunc != nil {
-		o.m.Lock()
-		defer o.m.Unlock()
-		o.ConnectionUnavailableFunc(t, c)
-	}
+	return nil
 }

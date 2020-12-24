@@ -33,7 +33,8 @@ var _ = Describe("type DiscoverObserverError", func() {
 	})
 })
 
-// discoverObserverStub is a test implementation of the TargetObserver interface.
+// discoverObserverStub is a test implementation of the DiscoverObserver
+// interface.
 type discoverObserverStub struct {
 	TargetDiscoveredFunc func(context.Context, Target) error
 }
