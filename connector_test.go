@@ -43,11 +43,10 @@ var _ = Describe("type Connector", func() {
 		It("invokes the observer", func() {
 			obs.TargetConnectedFunc = func(
 				ctx context.Context,
-				t Target,
-				conn grpc.ClientConnInterface,
+				c Connection,
 			) error {
-				Expect(t).To(Equal(target1))
-				Expect(conn).NotTo(BeNil())
+				Expect(c.ClientConnInterface).NotTo(BeNil())
+				Expect(c.Target).To(Equal(target1))
 				return errors.New("<error>")
 			}
 
@@ -70,9 +69,8 @@ var _ = Describe("type Connector", func() {
 
 			It("invokes the observer if the target is not ignored", func() {
 				obs.TargetConnectedFunc = func(
-					ctx context.Context,
-					t Target,
-					_ grpc.ClientConnInterface,
+					context.Context,
+					Connection,
 				) error {
 					return errors.New("<error>")
 				}
@@ -86,9 +84,8 @@ var _ = Describe("type Connector", func() {
 
 			It("does not invoke the observer if the target is ignored", func() {
 				obs.TargetConnectedFunc = func(
-					ctx context.Context,
-					t Target,
-					_ grpc.ClientConnInterface,
+					context.Context,
+					Connection,
 				) error {
 					return errors.New("unexpected call")
 				}
@@ -125,9 +122,8 @@ var _ = Describe("type Connector", func() {
 
 			It("returns the error without invoking the observer", func() {
 				obs.TargetConnectedFunc = func(
-					ctx context.Context,
-					t Target,
-					_ grpc.ClientConnInterface,
+					context.Context,
+					Connection,
 				) error {
 					Fail("unexpected call")
 					return nil
@@ -146,13 +142,13 @@ var _ = Describe("type Connector", func() {
 // connectObserverStub is a test implementation of the ConnectObserver
 // interface.
 type connectObserverStub struct {
-	TargetConnectedFunc func(context.Context, Target, grpc.ClientConnInterface) error
+	TargetConnectedFunc func(context.Context, Connection) error
 }
 
-// TargetConnected calls o.TargetConnectedFunc(ctx,t,conn) if it is non-nil.
-func (o *connectObserverStub) TargetConnected(ctx context.Context, t Target, c grpc.ClientConnInterface) error {
+// TargetConnected calls o.TargetConnectedFunc(ctx,c ) if it is non-nil.
+func (o *connectObserverStub) TargetConnected(ctx context.Context, c Connection) error {
 	if o.TargetConnectedFunc != nil {
-		return o.TargetConnectedFunc(ctx, t, c)
+		return o.TargetConnectedFunc(ctx, c)
 	}
 
 	return nil

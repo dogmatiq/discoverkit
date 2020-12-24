@@ -60,7 +60,13 @@ func (c *Connector) TargetDiscovered(ctx context.Context, t Target) error {
 	}
 	defer conn.Close()
 
-	return c.Observer.TargetConnected(ctx, t, conn)
+	return c.Observer.TargetConnected(
+		ctx,
+		Connection{
+			conn,
+			t,
+		},
+	)
 }
 
 // ConnectObserver is an interface for handling new target connections.
@@ -71,5 +77,12 @@ type ConnectObserver interface {
 	// is still executing.
 	//
 	// The connection is automatically closed when TargetConnected() returns.
-	TargetConnected(ctx context.Context, t Target, conn grpc.ClientConnInterface) error
+	TargetConnected(ctx context.Context, c Connection) error
+}
+
+// Connection is a gRPC connection that was established from a Target.
+type Connection struct {
+	grpc.ClientConnInterface
+
+	Target Target
 }
