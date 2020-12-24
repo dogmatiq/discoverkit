@@ -3,7 +3,10 @@ package discoverkit_test
 import (
 	"context"
 	"errors"
+	"fmt"
 	"net"
+	"sync"
+	"sync/atomic"
 	"time"
 
 	. "github.com/dogmatiq/discoverkit"
@@ -15,7 +18,7 @@ var _ = Describe("type DNSDiscoverer", func() {
 	var (
 		ctx    context.Context
 		cancel context.CancelFunc
-		obs    *targetObserverStub
+		obs    *discoverObserverStub
 		res    *dnsResolverStub
 		disc   *DNSDiscoverer
 	)
@@ -24,7 +27,7 @@ var _ = Describe("type DNSDiscoverer", func() {
 		ctx, cancel = context.WithTimeout(context.Background(), 1*time.Second)
 		ctx, cancel = context.WithCancel(ctx)
 
-		obs = &targetObserverStub{}
+		obs = &discoverObserverStub{}
 
 		res = &dnsResolverStub{}
 
@@ -39,7 +42,7 @@ var _ = Describe("type DNSDiscoverer", func() {
 	})
 
 	Describe("func Discover()", func() {
-		It("notifies the observer of discovery when addresses are found", func() {
+		It("invokes the observer when a target is discovered", func() {
 			res.LookupHostFunc = func(_ context.Context, host string) ([]string, error) {
 				cancel()
 
@@ -47,20 +50,31 @@ var _ = Describe("type DNSDiscoverer", func() {
 				return []string{"<addr-1>", "<addr-2>"}, nil
 			}
 
-			var targets []*Target
-			obs.TargetDiscoveredFunc = func(t *Target) {
+			var (
+				m       sync.Mutex
+				targets []Target
+			)
+
+			obs.TargetDiscoveredFunc = func(
+				_ context.Context,
+				t Target,
+			) error {
+				m.Lock()
 				targets = append(targets, t)
+				m.Unlock()
+
+				return nil
 			}
 
 			err := disc.Discover(ctx, obs)
 			Expect(err).To(Equal(context.Canceled))
 			Expect(targets).To(ConsistOf(
-				&Target{Name: "<addr-1>"},
-				&Target{Name: "<addr-2>"},
+				Target{Name: "<addr-1>"},
+				Target{Name: "<addr-2>"},
 			))
 		})
 
-		It("notifies the observer of undiscovery when addresses go away", func() {
+		It("cancels the observer context when a target goes away", func() {
 			disc.QueryInterval = 10 * time.Millisecond
 
 			res.LookupHostFunc = func(context.Context, string) ([]string, error) {
@@ -73,23 +87,58 @@ var _ = Describe("type DNSDiscoverer", func() {
 				return []string{"<addr-1>", "<addr-2>"}, nil
 			}
 
-			obs.TargetUndiscoveredFunc = func(t *Target) {
-				Expect(t).To(Equal(
-					&Target{Name: "<addr-1>"},
-				))
+			ok := make(chan struct{})
 
-				// Remove this function from the stub to prevent a failure when
-				// <addr-2> becomes unavailable when the discover is stopped.
-				obs.TargetUndiscoveredFunc = nil
+			obs.TargetDiscoveredFunc = func(
+				targetCtx context.Context,
+				t Target,
+			) error {
+				<-targetCtx.Done()
 
-				cancel()
+				// We expect "<addr-1>" to be "undiscovered" based on the setup
+				// of res.LookupHostFunc above.
+				if t.Name == "<addr-1>" {
+					close(ok)
+					return nil
+				}
+
+				// Otherwise we would expect only to be canceled when the
+				// discover is stopped by cancelling the parent context.
+				if ctx.Err() == nil {
+					return fmt.Errorf("unexpected cancelation for %s", t.Name)
+				}
+
+				return nil
 			}
 
-			err := disc.Discover(ctx, obs)
+			result := make(chan error, 1)
+			go func() {
+				result <- disc.Discover(ctx, obs)
+			}()
+
+			select {
+			case <-ok:
+				// We expect the "ok" channel to be closed when the context
+				// associated with "<addr-1>" is canceled.
+				cancel() // stop the discoverer
+
+			case err := <-result:
+				// We don't expect the discoverer to stop before "ok" is closed.
+				Expect(err).ShouldNot(HaveOccurred(), "discoverer stopped prematurely")
+
+			case <-ctx.Done():
+				// We don't expect the parent context to be canceled before "ok"
+				// is closed.
+				Expect(ctx.Err()).ShouldNot(HaveOccurred(), "context canceled prematurely")
+			}
+
+			// Now that we called cancel() we expect the discoverer to stop in a
+			// timely manner.
+			err := <-result
 			Expect(err).To(Equal(context.Canceled))
 		})
 
-		It("notifies the observer of undiscovery when the discoverer is stopped", func() {
+		It("cancels the context passed to the observer when the discoverer is stopped", func() {
 			disc.QueryInterval = 10 * time.Millisecond
 
 			res.LookupHostFunc = func(context.Context, string) ([]string, error) {
@@ -97,28 +146,36 @@ var _ = Describe("type DNSDiscoverer", func() {
 				return []string{"<addr-1>", "<addr-2>"}, nil
 			}
 
-			targets := map[*Target]struct{}{}
+			var running int32 // atomic
 
-			obs.TargetDiscoveredFunc = func(t *Target) {
-				targets[t] = struct{}{}
-			}
+			obs.TargetDiscoveredFunc = func(
+				ctx context.Context,
+				_ Target,
+			) error {
+				n := atomic.AddInt32(&running, 1)
+				defer atomic.AddInt32(&running, -1)
 
-			obs.TargetUndiscoveredFunc = func(t *Target) {
-				_, ok := targets[t]
-				Expect(ok).To(BeTrue())
-				delete(targets, t)
+				if int(n) == 2 {
+					go cancel()
+				}
+
+				<-ctx.Done()
+				return ctx.Err()
 			}
 
 			err := disc.Discover(ctx, obs)
 			Expect(err).To(Equal(context.Canceled))
-			Expect(targets).To(BeEmpty())
+			Expect(atomic.LoadInt32(&running)).To(BeZero())
 		})
 
 		It("uses net.DefaultResolver by default", func() {
 			disc.QueryHost = "localhost"
 			disc.Resolver = nil
 
-			obs.TargetDiscoveredFunc = func(t *Target) {
+			obs.TargetDiscoveredFunc = func(
+				_ context.Context,
+				t Target,
+			) error {
 				cancel()
 
 				Expect(t.Name).To(
@@ -127,6 +184,8 @@ var _ = Describe("type DNSDiscoverer", func() {
 						Equal("::1"),
 					),
 				)
+
+				return nil
 			}
 
 			err := disc.Discover(ctx, obs)
@@ -135,8 +194,8 @@ var _ = Describe("type DNSDiscoverer", func() {
 
 		When("there is a NewTargets() function", func() {
 			It("uses the targets returned by NewTargets()", func() {
-				disc.NewTargets = func(_ context.Context, addr string) ([]*Target, error) {
-					return []*Target{
+				disc.NewTargets = func(_ context.Context, addr string) ([]Target, error) {
+					return []Target{
 						{Name: addr + "-A"},
 						{Name: addr + "-B"},
 					}, nil
@@ -147,30 +206,40 @@ var _ = Describe("type DNSDiscoverer", func() {
 					return []string{"<addr-1>", "<addr-2>"}, nil
 				}
 
-				var targets []*Target
-				obs.TargetDiscoveredFunc = func(t *Target) {
+				var (
+					m       sync.Mutex
+					targets []Target
+				)
+
+				obs.TargetDiscoveredFunc = func(
+					_ context.Context,
+					t Target,
+				) error {
+					m.Lock()
 					targets = append(targets, t)
+					m.Unlock()
+
+					return nil
 				}
 
 				err := disc.Discover(ctx, obs)
 				Expect(err).To(Equal(context.Canceled))
 				Expect(targets).To(ConsistOf(
-					&Target{Name: "<addr-1>-A"},
-					&Target{Name: "<addr-1>-B"},
-					&Target{Name: "<addr-2>-A"},
-					&Target{Name: "<addr-2>-B"},
+					Target{Name: "<addr-1>-A"},
+					Target{Name: "<addr-1>-B"},
+					Target{Name: "<addr-2>-A"},
+					Target{Name: "<addr-2>-B"},
 				))
 			})
 
-			It("properly tracks addresses for which NewTargets() returns an empty slice", func() {
+			It("does not call NewTargets() again for an address that already produced zero targets", func() {
 				disc.QueryInterval = 10 * time.Millisecond
 
-				disc.NewTargets = func(context.Context, string) ([]*Target, error) {
+				disc.NewTargets = func(context.Context, string) ([]Target, error) {
 					// Replace this function on the stub to ensure that it
 					// doesn't get called again for the same address.
-					disc.NewTargets = func(context.Context, string) ([]*Target, error) {
-						Fail("unexpected second invocation of NewTargets()")
-						return nil, nil
+					disc.NewTargets = func(context.Context, string) ([]Target, error) {
+						return nil, errors.New("unexpected second invocation of NewTargets()")
 					}
 
 					return nil, nil
@@ -192,8 +261,11 @@ var _ = Describe("type DNSDiscoverer", func() {
 					return []string{"<addr>"}, nil
 				}
 
-				obs.TargetDiscoveredFunc = func(*Target) {
-					Fail("unexpoected notification of discovered target")
+				obs.TargetDiscoveredFunc = func(
+					context.Context,
+					Target,
+				) error {
+					return errors.New("unexpected call to TargetDiscovered()")
 				}
 
 				err := disc.Discover(ctx, obs)
@@ -201,7 +273,7 @@ var _ = Describe("type DNSDiscoverer", func() {
 			})
 
 			It("returns an error if NewTargets() returns an error", func() {
-				disc.NewTargets = func(context.Context, string) ([]*Target, error) {
+				disc.NewTargets = func(context.Context, string) ([]Target, error) {
 					return nil, errors.New("<error>")
 				}
 
@@ -214,8 +286,8 @@ var _ = Describe("type DNSDiscoverer", func() {
 			})
 		})
 
-		When("the resolver fails", func() {
-			It("does not propagate not-found errors", func() {
+		When("the resolver returns an error", func() {
+			It("ignores not-found errors", func() {
 				res.LookupHostFunc = func(context.Context, string) ([]string, error) {
 					cancel()
 					return nil, &net.DNSError{
@@ -227,7 +299,7 @@ var _ = Describe("type DNSDiscoverer", func() {
 				Expect(err).To(Equal(context.Canceled)) // note: not the net.DNSError
 			})
 
-			It("propagates other errors", func() {
+			It("returns other errors", func() {
 				res.LookupHostFunc = func(context.Context, string) ([]string, error) {
 					return nil, errors.New("<error>")
 				}

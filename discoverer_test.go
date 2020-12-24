@@ -1,32 +1,49 @@
 package discoverkit_test
 
 import (
-	"sync"
+	"context"
+	"errors"
 
 	. "github.com/dogmatiq/discoverkit"
+	. "github.com/onsi/ginkgo"
+	. "github.com/onsi/gomega"
 )
 
-// targetObserverStub is a test implementation of the TargetObserver interface.
-type targetObserverStub struct {
-	m                      sync.Mutex
-	TargetDiscoveredFunc   func(*Target)
-	TargetUndiscoveredFunc func(*Target)
+var _ = Describe("type DiscoverObserverError", func() {
+	Describe("func Error()", func() {
+		It("provides context about the target", func() {
+			err := DiscoverObserverError{
+				Target: Target{Name: "<target>"},
+				Cause:  errors.New("<error>"),
+			}
+
+			Expect(err.Error()).To(Equal("failure observing '<target>' target: <error>"))
+		})
+	})
+
+	Describe("func Unwrap()", func() {
+		It("unwraps the causal error", func() {
+			cause := errors.New("<error>")
+			err := DiscoverObserverError{
+				Cause: cause,
+			}
+
+			Expect(errors.Is(err, cause)).To(BeTrue())
+		})
+	})
+})
+
+// discoverObserverStub is a test implementation of the DiscoverObserver
+// interface.
+type discoverObserverStub struct {
+	TargetDiscoveredFunc func(context.Context, Target) error
 }
 
-// TargetDiscovered calls o.TargetDiscoveredFunc(t) if it is non-nil.
-func (o *targetObserverStub) TargetDiscovered(t *Target) {
+// TargetDiscovered calls o.TargetDiscoveredFunc(ctx, t) if it is non-nil.
+func (o *discoverObserverStub) TargetDiscovered(ctx context.Context, t Target) error {
 	if o.TargetDiscoveredFunc != nil {
-		o.m.Lock()
-		defer o.m.Unlock()
-		o.TargetDiscoveredFunc(t)
+		return o.TargetDiscoveredFunc(ctx, t)
 	}
-}
 
-// TargetUndiscovered calls o.TargetUndiscoveredFunc(t) if it is non-nil.
-func (o *targetObserverStub) TargetUndiscovered(t *Target) {
-	if o.TargetUndiscoveredFunc != nil {
-		o.m.Lock()
-		defer o.m.Unlock()
-		o.TargetUndiscoveredFunc(t)
-	}
+	return nil
 }

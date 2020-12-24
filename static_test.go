@@ -2,6 +2,9 @@ package discoverkit_test
 
 import (
 	"context"
+	"errors"
+	"sync"
+	"sync/atomic"
 	"time"
 
 	. "github.com/dogmatiq/discoverkit"
@@ -13,7 +16,7 @@ var _ = Describe("type StaticDiscoverer", func() {
 	var (
 		ctx    context.Context
 		cancel context.CancelFunc
-		obs    *targetObserverStub
+		obs    *discoverObserverStub
 		disc   StaticDiscoverer
 	)
 
@@ -21,7 +24,7 @@ var _ = Describe("type StaticDiscoverer", func() {
 		ctx, cancel = context.WithTimeout(context.Background(), 1*time.Second)
 		ctx, cancel = context.WithCancel(ctx)
 
-		obs = &targetObserverStub{}
+		obs = &discoverObserverStub{}
 
 		disc = StaticDiscoverer{
 			{Name: "<target-1>"},
@@ -34,20 +37,25 @@ var _ = Describe("type StaticDiscoverer", func() {
 	})
 
 	Describe("func Discover()", func() {
-		It("notifies the observer of discovery immediately", func() {
-			var targets []*Target
+		It("invokes the observer immediately", func() {
+			var (
+				m       sync.Mutex
+				targets []Target
+			)
 
-			obs.TargetDiscoveredFunc = func(t *Target) {
+			obs.TargetDiscoveredFunc = func(
+				_ context.Context,
+				t Target,
+			) error {
+				m.Lock()
 				targets = append(targets, t)
+				m.Unlock()
 
 				if len(targets) == len(disc) {
-					obs.TargetUndiscoveredFunc = nil
 					cancel()
 				}
-			}
 
-			obs.TargetUndiscoveredFunc = func(*Target) {
-				Fail("observer unexpectedly notified of target unavailability")
+				return nil
 			}
 
 			err := disc.Discover(ctx, obs)
@@ -55,26 +63,48 @@ var _ = Describe("type StaticDiscoverer", func() {
 			Expect(targets).To(ConsistOf(disc))
 		})
 
-		It("notifies the observer of undiscovery when the discoverer is stopped", func() {
-			targets := map[*Target]struct{}{}
+		It("cancels the context passed to the observer when the discoverer is stopped", func() {
+			var running int32 // atomic
 
-			obs.TargetDiscoveredFunc = func(t *Target) {
-				targets[t] = struct{}{}
+			obs.TargetDiscoveredFunc = func(
+				ctx context.Context,
+				_ Target,
+			) error {
+				n := atomic.AddInt32(&running, 1)
+				defer atomic.AddInt32(&running, -1)
 
-				if len(targets) == len(disc) {
-					cancel()
+				if int(n) == len(disc) {
+					go cancel()
 				}
-			}
 
-			obs.TargetUndiscoveredFunc = func(t *Target) {
-				_, ok := targets[t]
-				Expect(ok).To(BeTrue())
-				delete(targets, t)
+				<-ctx.Done()
+				return ctx.Err()
 			}
 
 			err := disc.Discover(ctx, obs)
 			Expect(err).To(Equal(context.Canceled))
-			Expect(targets).To(BeEmpty())
+			Expect(atomic.LoadInt32(&running)).To(BeZero())
+		})
+
+		It("stops the discoverer if the observer produces an error", func() {
+			obs.TargetDiscoveredFunc = func(
+				_ context.Context,
+				t Target,
+			) error {
+				if t.Name == "<target-2>" {
+					return errors.New("<error>")
+				}
+
+				return nil
+			}
+
+			err := disc.Discover(ctx, obs)
+			Expect(err).To(Equal(DiscoverObserverError{
+				Discoverer: disc,
+				Observer:   obs,
+				Target:     Target{Name: "<target-2>"},
+				Cause:      errors.New("<error>"),
+			}))
 		})
 	})
 })
