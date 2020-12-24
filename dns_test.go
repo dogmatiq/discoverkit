@@ -95,7 +95,7 @@ var _ = Describe("type DNSDiscoverer", func() {
 			) error {
 				<-targetCtx.Done()
 
-				// We expect "<addr-1>" to be "undiscovered" based on the setup
+				// We expect "<addr-1>" to become unavailable based on the setup
 				// of res.LookupHostFunc above.
 				if t.Name == "<addr-1>" {
 					close(ok)

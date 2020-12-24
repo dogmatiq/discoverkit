@@ -13,7 +13,7 @@ type StaticDiscoverer []Target
 // Discover invokes o.TargetDiscovered() when a new target is discovered.
 //
 // Each invocation is made on its own goroutine. The context passed to
-// o.TargetDiscovered() is canceled when the target is "undiscovered", or the
+// o.TargetDiscovered() is canceled when the target becomes unavailable, or the
 // discoverer itself is stopped due to cancelation of ctx.
 //
 // The discoverer stops and returns a DiscoverObserverError if any call to

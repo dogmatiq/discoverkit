@@ -16,7 +16,7 @@ type Discoverer interface {
 	// Discover invokes o.TargetDiscovered() when a new target is discovered.
 	//
 	// Each invocation is made on its own goroutine. The context passed to
-	// o.TargetDiscovered() is canceled when the target is "undiscovered", or
+	// o.TargetDiscovered() is canceled when the target becomes unavailable, or
 	// the discoverer itself is stopped due to cancelation of ctx.
 	//
 	// The discoverer stops and returns a DiscoverObserverError if any call to
@@ -41,8 +41,8 @@ type Target struct {
 type DiscoverObserver interface {
 	// TargetDiscovered is called when a new target is discovered.
 	//
-	// ctx is canceled if the target is undiscovered while TargetDiscovered() is
-	// still executing.
+	// ctx is canceled if the target becomes unavailable while
+	// TargetDiscovered() is still executing.
 	TargetDiscovered(ctx context.Context, t Target) error
 }
 

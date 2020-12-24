@@ -60,7 +60,7 @@ type DNSDiscoverer struct {
 // Discover invokes o.TargetDiscovered() when a new target is discovered.
 //
 // Each invocation is made on its own goroutine. The context passed to
-// o.TargetDiscovered() is canceled when the target is "undiscovered", or the
+// o.TargetDiscovered() is canceled when the target becomes unavailable, or the
 // discoverer itself is stopped due to cancelation of ctx.
 //
 // The discoverer stops and returns a DiscoverObserverError if any call to
@@ -121,7 +121,7 @@ func (d *DNSDiscoverer) sync(
 			// so we're left only with addresses that we have not seen before.
 			delete(results, addr)
 		} else {
-			// This address is no longer available. Cancel the associated
+			// This address is no longer in the results. Cancel the associated
 			// context to stop the observer goroutines.
 			delete(d.known, addr)
 			cancel()

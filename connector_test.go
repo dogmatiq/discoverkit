@@ -149,7 +149,7 @@ type connectObserverStub struct {
 	TargetConnectedFunc func(context.Context, Target, grpc.ClientConnInterface) error
 }
 
-// TargetConnected calls o.ConnectionAvailableFunc(ctx,t,conn) if it is non-nil.
+// TargetConnected calls o.TargetConnectedFunc(ctx,t,conn) if it is non-nil.
 func (o *connectObserverStub) TargetConnected(ctx context.Context, t Target, c grpc.ClientConnInterface) error {
 	if o.TargetConnectedFunc != nil {
 		return o.TargetConnectedFunc(ctx, t, c)

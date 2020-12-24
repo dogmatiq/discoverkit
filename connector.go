@@ -10,7 +10,8 @@ import (
 //
 // It implements the DiscoverObserver and forwards to a ConnectObserver.
 type Connector struct {
-	// Observer is the observer to notify about gRPC connections.
+	// Observer is the observer that is invoked when a connection is
+	// established.
 	Observer ConnectObserver
 
 	// Dial is the function used to dial gRPC targets.
@@ -34,7 +35,7 @@ type Connector struct {
 
 // TargetDiscovered is called when a new target is discovered.
 //
-// ctx is canceled if the target is undiscovered while TargetDiscovered() is
+// ctx is canceled if the target becomes unavailable while TargetDiscovered() is
 // still executing.
 func (c *Connector) TargetDiscovered(ctx context.Context, t Target) error {
 	if c.Ignore != nil {
@@ -66,8 +67,8 @@ func (c *Connector) TargetDiscovered(ctx context.Context, t Target) error {
 type ConnectObserver interface {
 	// TargetConnected is called when a new connection is established.
 	//
-	// ctx is canceled if the target is undiscovered while TargetConnected() is
-	// still executed.
+	// ctx is canceled if the target becomes unavailable while TargetConnected()
+	// is still executing.
 	//
 	// The connection is automatically closed when TargetConnected() returns.
 	TargetConnected(ctx context.Context, t Target, conn grpc.ClientConnInterface) error
