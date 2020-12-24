@@ -84,5 +84,6 @@ type ConnectObserver interface {
 type Connection struct {
 	grpc.ClientConnInterface
 
+	// Target is the target that was dialed to establish the connection.
 	Target Target
 }
