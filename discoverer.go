@@ -18,8 +18,7 @@ type Discoverer interface {
 	Discover(ctx context.Context, o DiscoverObserver) error
 }
 
-// DiscoverObserver is an interface for types that accept notifications about
-// target discovery.
+// DiscoverObserver is an interface for handling the discovery of a target.
 type DiscoverObserver interface {
 	// TargetDiscovered is called when a new target is discovered.
 	//

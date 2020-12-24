@@ -265,7 +265,7 @@ var _ = Describe("type DNSDiscoverer", func() {
 					context.Context,
 					Target,
 				) error {
-					return errors.New("unexpoected notification of discovered target")
+					return errors.New("unexpected call to TargetDiscovered()")
 				}
 
 				err := disc.Discover(ctx, obs)
