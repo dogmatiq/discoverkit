@@ -18,7 +18,7 @@ var _ = Describe("type DNSDiscoverer", func() {
 	var (
 		ctx    context.Context
 		cancel context.CancelFunc
-		obs    *discoverObserverStub
+		obs    *targetObserverStub
 		res    *dnsResolverStub
 		disc   *DNSDiscoverer
 	)
@@ -27,7 +27,7 @@ var _ = Describe("type DNSDiscoverer", func() {
 		ctx, cancel = context.WithTimeout(context.Background(), 1*time.Second)
 		ctx, cancel = context.WithCancel(ctx)
 
-		obs = &discoverObserverStub{}
+		obs = &targetObserverStub{}
 
 		res = &dnsResolverStub{}
 

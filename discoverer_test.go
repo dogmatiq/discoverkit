@@ -9,10 +9,10 @@ import (
 	. "github.com/onsi/gomega"
 )
 
-var _ = Describe("type DiscoverObserverError", func() {
+var _ = Describe("type TargetObserverError", func() {
 	Describe("func Error()", func() {
 		It("provides context about the target", func() {
-			err := DiscoverObserverError{
+			err := TargetObserverError{
 				Target: Target{Name: "<target>"},
 				Cause:  errors.New("<error>"),
 			}
@@ -24,7 +24,7 @@ var _ = Describe("type DiscoverObserverError", func() {
 	Describe("func Unwrap()", func() {
 		It("unwraps the causal error", func() {
 			cause := errors.New("<error>")
-			err := DiscoverObserverError{
+			err := TargetObserverError{
 				Cause: cause,
 			}
 
@@ -33,14 +33,14 @@ var _ = Describe("type DiscoverObserverError", func() {
 	})
 })
 
-// discoverObserverStub is a test implementation of the DiscoverObserver
+// targetObserverStub is a test implementation of the TargetObserver
 // interface.
-type discoverObserverStub struct {
+type targetObserverStub struct {
 	TargetDiscoveredFunc func(context.Context, Target) error
 }
 
 // TargetDiscovered calls o.TargetDiscoveredFunc(ctx, t) if it is non-nil.
-func (o *discoverObserverStub) TargetDiscovered(ctx context.Context, t Target) error {
+func (o *targetObserverStub) TargetDiscovered(ctx context.Context, t Target) error {
 	if o.TargetDiscoveredFunc != nil {
 		return o.TargetDiscoveredFunc(ctx, t)
 	}

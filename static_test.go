@@ -16,7 +16,7 @@ var _ = Describe("type StaticDiscoverer", func() {
 	var (
 		ctx    context.Context
 		cancel context.CancelFunc
-		obs    *discoverObserverStub
+		obs    *targetObserverStub
 		disc   StaticDiscoverer
 	)
 
@@ -24,7 +24,7 @@ var _ = Describe("type StaticDiscoverer", func() {
 		ctx, cancel = context.WithTimeout(context.Background(), 1*time.Second)
 		ctx, cancel = context.WithCancel(ctx)
 
-		obs = &discoverObserverStub{}
+		obs = &targetObserverStub{}
 
 		disc = StaticDiscoverer{
 			{Name: "<target-1>"},
@@ -99,7 +99,7 @@ var _ = Describe("type StaticDiscoverer", func() {
 			}
 
 			err := disc.Discover(ctx, obs)
-			Expect(err).To(Equal(DiscoverObserverError{
+			Expect(err).To(Equal(TargetObserverError{
 				Discoverer: disc,
 				Observer:   obs,
 				Target:     Target{Name: "<target-2>"},

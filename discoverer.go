@@ -19,9 +19,9 @@ type Discoverer interface {
 	// o.TargetDiscovered() is canceled when the target becomes unavailable, or
 	// the discoverer itself is stopped due to cancelation of ctx.
 	//
-	// The discoverer stops and returns a DiscoverObserverError if any call to
+	// The discoverer stops and returns a TargetObserverError if any call to
 	// o.TargetDiscovered() returns a non-nil error.
-	Discover(ctx context.Context, o DiscoverObserver) error
+	Discover(ctx context.Context, o TargetObserver) error
 }
 
 // Target represents some dialable gRPC target, typically a single gRPC server.
@@ -37,8 +37,8 @@ type Target struct {
 	DialOptions []grpc.DialOption
 }
 
-// DiscoverObserver is an interface for handling the discovery of a target.
-type DiscoverObserver interface {
+// TargetObserver is an interface for handling the discovery of a target.
+type TargetObserver interface {
 	// TargetDiscovered is called when a new target is discovered.
 	//
 	// ctx is canceled if the target becomes unavailable while
@@ -46,20 +46,20 @@ type DiscoverObserver interface {
 	TargetDiscovered(ctx context.Context, t Target) error
 }
 
-// DiscoverObserverError indicates that a discoverer was stopped because a
-// DiscoverObserver produced an error.
-type DiscoverObserverError struct {
+// TargetObserverError indicates that a discoverer was stopped because a
+// TargetObserver produced an error.
+type TargetObserverError struct {
 	Discoverer Discoverer
-	Observer   DiscoverObserver
+	Observer   TargetObserver
 	Target     Target
 	Cause      error
 }
 
-func (e DiscoverObserverError) Unwrap() error {
+func (e TargetObserverError) Unwrap() error {
 	return e.Cause
 }
 
-func (e DiscoverObserverError) Error() string {
+func (e TargetObserverError) Error() string {
 	return fmt.Sprintf(
 		"failure observing '%s' target: %s",
 		e.Target.Name,
@@ -70,14 +70,14 @@ func (e DiscoverObserverError) Error() string {
 // targetDiscovered calls o.TargetDiscovered().
 //
 // If o.TargetDiscovered() returns a non-nil error it returns a
-// DiscoverObserverError.
+// TargetObserverError.
 //
 // If o.TargetDiscovered() returns a context.Canceled error *and* ctx is
 // canceled, it returns nil.
 func targetDiscovered(
 	ctx context.Context,
 	d Discoverer,
-	o DiscoverObserver,
+	o TargetObserver,
 	t Target,
 ) error {
 	err := o.TargetDiscovered(ctx, t)
@@ -90,7 +90,7 @@ func targetDiscovered(
 		return nil
 	}
 
-	return DiscoverObserverError{
+	return TargetObserverError{
 		Discoverer: d,
 		Observer:   o,
 		Target:     t,

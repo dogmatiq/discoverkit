@@ -54,7 +54,7 @@ type DNSDiscoverer struct {
 	parent   context.Context
 	group    *errgroup.Group
 	known    map[string]context.CancelFunc
-	observer DiscoverObserver
+	observer TargetObserver
 }
 
 // Discover invokes o.TargetDiscovered() when a new target is discovered.
@@ -63,9 +63,9 @@ type DNSDiscoverer struct {
 // o.TargetDiscovered() is canceled when the target becomes unavailable, or the
 // discoverer itself is stopped due to cancelation of ctx.
 //
-// The discoverer stops and returns a DiscoverObserverError if any call to
+// The discoverer stops and returns a TargetObserverError if any call to
 // o.TargetDiscovered() returns a non-nil error.
-func (d *DNSDiscoverer) Discover(ctx context.Context, o DiscoverObserver) error {
+func (d *DNSDiscoverer) Discover(ctx context.Context, o TargetObserver) error {
 	d.group, d.parent = errgroup.WithContext(ctx)
 	d.known = map[string]context.CancelFunc{}
 	d.observer = o

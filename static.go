@@ -16,9 +16,9 @@ type StaticDiscoverer []Target
 // o.TargetDiscovered() is canceled when the target becomes unavailable, or the
 // discoverer itself is stopped due to cancelation of ctx.
 //
-// The discoverer stops and returns a DiscoverObserverError if any call to
+// The discoverer stops and returns a TargetObserverError if any call to
 // o.TargetDiscovered() returns a non-nil error.
-func (d StaticDiscoverer) Discover(ctx context.Context, o DiscoverObserver) error {
+func (d StaticDiscoverer) Discover(ctx context.Context, o TargetObserver) error {
 	g, ctx := errgroup.WithContext(ctx)
 
 	for _, t := range d {

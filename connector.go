@@ -8,7 +8,7 @@ import (
 
 // A Connector establishes connections to discovered gRPC targets.
 //
-// It implements the DiscoverObserver and forwards to a ConnectObserver.
+// It implements TargetServer and forwards to a ConnectObserver.
 type Connector struct {
 	// Observer is the observer that is invoked when a connection is
 	// established.
