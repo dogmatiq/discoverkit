@@ -60,8 +60,11 @@ var _ = Describe("type Connector", func() {
 
 		When("there is an ignore predicate", func() {
 			BeforeEach(func() {
-				connector.Ignore = func(t Target) bool {
-					return t.Name == target1.Name
+				connector.Ignore = func(
+					_ context.Context,
+					t Target,
+				) (bool, error) {
+					return t.Name == target1.Name, nil
 				}
 			})
 
@@ -95,6 +98,21 @@ var _ = Describe("type Connector", func() {
 					target1,
 				)
 				Expect(err).ShouldNot(HaveOccurred())
+			})
+
+			It("returns the error produced by the ignore predicate", func() {
+				connector.Ignore = func(
+					_ context.Context,
+					t Target,
+				) (bool, error) {
+					return false, errors.New("<error>")
+				}
+
+				err := connector.TargetDiscovered(
+					context.Background(),
+					target1,
+				)
+				Expect(err).To(MatchError("<error>"))
 			})
 		})
 

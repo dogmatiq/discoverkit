@@ -29,7 +29,7 @@ type Connector struct {
 	// notified about them.
 	//
 	// If it is nil, no targets are ignored.
-	Ignore func(Target) bool
+	Ignore func(context.Context, Target) (bool, error)
 }
 
 // TargetDiscovered is called when a new target is discovered.
@@ -37,8 +37,11 @@ type Connector struct {
 // ctx is canceled if the target is undiscovered while TargetDiscovered() is
 // still executing.
 func (c *Connector) TargetDiscovered(ctx context.Context, t Target) error {
-	if c.Ignore != nil && c.Ignore(t) {
-		return nil
+	if c.Ignore != nil {
+		ignore, err := c.Ignore(ctx, t)
+		if ignore || err != nil {
+			return err
+		}
 	}
 
 	dial := c.Dial
