@@ -51,7 +51,6 @@ type DNSDiscoverer struct {
 	// If it is non-positive, the DefaultDNSQueryInterval constant is used.
 	QueryInterval time.Duration
 
-	parent   context.Context
 	group    *errgroup.Group
 	known    map[string]context.CancelFunc
 	observer TargetObserver
@@ -66,7 +65,7 @@ type DNSDiscoverer struct {
 // The discoverer stops and returns a TargetObserverError if any call to
 // o.TargetDiscovered() returns a non-nil error.
 func (d *DNSDiscoverer) Discover(ctx context.Context, o TargetObserver) error {
-	d.group, d.parent = errgroup.WithContext(ctx)
+	d.group, ctx = errgroup.WithContext(ctx)
 	d.known = map[string]context.CancelFunc{}
 	d.observer = o
 
@@ -75,7 +74,7 @@ func (d *DNSDiscoverer) Discover(ctx context.Context, o TargetObserver) error {
 		// goroutines. This ensures both that Wait() always has something to
 		// wait for, so that it doesn't just return immediately, and that the
 		// whole group is shutdown if the discovery process itself fails.
-		return d.discover(d.parent)
+		return d.discover(ctx)
 	})
 
 	return d.group.Wait()
@@ -136,11 +135,9 @@ func (d *DNSDiscoverer) sync(
 			return err
 		}
 
-		// Create a new context specifically for this address. Note that it is
-		// derived directly from d.parent, not ctx (which represents only the
-		// lifetime of this call to the update() method). It will be canceled if
-		// the address dissappears from the query results.
-		addrCtx, cancel := context.WithCancel(d.parent)
+		// Create a new context specifically for this address. It will be
+		// canceled if the address dissappears from the query results.
+		addrCtx, cancel := context.WithCancel(ctx)
 		d.known[addr] = cancel
 
 		// Start a new goroutine for each target.
