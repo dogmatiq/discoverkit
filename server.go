@@ -21,7 +21,7 @@ type Server struct {
 	//
 	// This allows many goroutines to read from any given "version" of the map
 	// without holding any locks.
-	available map[string]struct{}
+	available map[string]*discoverspec.Identity
 
 	// changed is a "broadcast" channel that is closed to signal that the set of
 	// available applications has been replaced with a new "version".
@@ -31,25 +31,25 @@ type Server struct {
 var _ discoverspec.DiscoverAPIServer = (*Server)(nil)
 
 // Available marks the given application as available.
-func (s *Server) Available(app configkit.Identity) {
-	s.update(app, true)
+func (s *Server) Available(id configkit.Identity) {
+	s.update(id, true)
 }
 
 // Unavailable marks the given application as unavailable.
-func (s *Server) Unavailable(app configkit.Identity) {
-	s.update(app, false)
+func (s *Server) Unavailable(id configkit.Identity) {
+	s.update(id, false)
 }
 
 // update the availability of the given app.
-func (s *Server) update(app configkit.Identity, available bool) {
-	if err := app.Validate(); err != nil {
+func (s *Server) update(id configkit.Identity, available bool) {
+	if err := id.Validate(); err != nil {
 		panic(err)
 	}
 
 	s.m.Lock()
 	defer s.m.Unlock()
 
-	if _, ok := s.available[app.Key]; ok == available {
+	if _, ok := s.available[id.Key]; ok == available {
 		// The desired availability is the same as the app's current
 		// availability, do nothing.
 		return
@@ -57,18 +57,21 @@ func (s *Server) update(app configkit.Identity, available bool) {
 
 	// Create a clone of s.available. This avoids any data races with other
 	// goroutines reading the map currently references by s.available.
-	next := make(map[string]struct{}, len(s.available))
+	next := make(map[string]*discoverspec.Identity, len(s.available))
 
 	// Add the newly available application.
 	if available {
-		next[app.Key] = struct{}{}
+		next[id.Key] = &discoverspec.Identity{
+			Name: id.Name,
+			Key:  id.Key,
+		}
 	}
 
 	// Copy the existing applications excluding the current app if it has become
 	// unavailable.
-	for k := range s.available {
-		if !available && k == app.Key {
-			next[k] = struct{}{}
+	for k, v := range s.available {
+		if available || k != id.Key {
+			next[k] = v
 		}
 	}
 
@@ -84,11 +87,11 @@ func (s *Server) update(app configkit.Identity, available bool) {
 
 // snapshot returns the current set of available applications, and a channel that
 // is closed if the set of available applications changes.
-func (s *Server) snapshot() (map[string]struct{}, <-chan struct{}) {
+func (s *Server) snapshot() (map[string]*discoverspec.Identity, <-chan struct{}) {
 	s.m.Lock()
 	defer s.m.Unlock()
 
-	if s.changed != nil {
+	if s.changed == nil {
 		s.changed = make(chan struct{})
 	}
 
@@ -106,8 +109,8 @@ func (s *Server) WatchApplications(
 	//
 	// This approach is taken as it allows changes to the available applications
 	// to be applied in s.Available() and s.Unavailable() without waiting for
-	// each individual WatchApplications() consumer to receive its responses.
-	var prev map[string]struct{}
+	// each individual WatchApplications() consumer to receive its updates.
+	var prev map[string]*discoverspec.Identity
 
 	for {
 		// Read the current list of available applications.
@@ -141,16 +144,16 @@ func (s *Server) WatchApplications(
 func (s *Server) diff(
 	stream discoverspec.DiscoverAPI_WatchApplicationsServer,
 	available bool,
-	lhs, rhs map[string]struct{},
+	lhs, rhs map[string]*discoverspec.Identity,
 ) error {
-	for k := range lhs {
+	for k, id := range lhs {
 		if _, ok := rhs[k]; ok {
 			continue
 		}
 
 		res := &discoverspec.WatchApplicationsResponse{
-			ApplicationKey: k,
-			Available:      available,
+			Identity:  id,
+			Available: available,
 		}
 
 		if err := stream.Send(res); err != nil {
