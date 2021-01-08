@@ -56,7 +56,7 @@ func (s *Server) update(id configkit.Identity, available bool) {
 	}
 
 	// Create a clone of s.available. This avoids any data races with other
-	// goroutines reading the map currently references by s.available.
+	// goroutines reading the map currently referenced by s.available.
 	next := make(map[string]*discoverspec.Identity, len(s.available))
 
 	// Add the newly available application.
