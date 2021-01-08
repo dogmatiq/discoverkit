@@ -16,8 +16,8 @@ type Server struct {
 	//
 	// The map value itself is treated as though it is immutable. When a change
 	// to the available applications is made the map is cloned and the changes
-	// applied to the clone. Finally, s.available is updated to refer to the
-	// clone.
+	// applied to the clone. Finally, the available field is updated to refer
+	// to the clone.
 	//
 	// This allows many goroutines to read from any given "version" of the map
 	// without holding any locks.
