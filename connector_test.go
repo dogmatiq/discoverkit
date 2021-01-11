@@ -145,7 +145,7 @@ type connectObserverStub struct {
 	TargetConnectedFunc func(context.Context, Connection) error
 }
 
-// TargetConnected calls o.TargetConnectedFunc(ctx,c ) if it is non-nil.
+// TargetConnected calls o.TargetConnectedFunc(ctx, c) if it is non-nil.
 func (o *connectObserverStub) TargetConnected(ctx context.Context, c Connection) error {
 	if o.TargetConnectedFunc != nil {
 		return o.TargetConnectedFunc(ctx, c)

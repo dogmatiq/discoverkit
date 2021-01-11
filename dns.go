@@ -22,7 +22,8 @@ const (
 	DefaultDNSQueryInterval = 10 * time.Second
 )
 
-// DNSDiscoverer is a Discoverer that performs a DNS query to discover targets.
+// DNSDiscoverer is a TargetDiscoverer that performs a DNS query to discover
+// targets.
 //
 // It queries a single host and treats each A, AAAA or CNAME record in the
 // result as a distinct target. This is not a DNS-SD implementation.

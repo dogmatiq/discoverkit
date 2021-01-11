@@ -7,12 +7,12 @@ import (
 	"google.golang.org/grpc"
 )
 
-// Discoverer is an interface for services that discover gRPC targets.
+// TargetDiscoverer is an interface for services that discover gRPC targets.
 //
 // A "target" is some endpoint that can be dialed using gRPC. It is typically a
 // single gRPC server, but may be anything that can be referred to by a "name"
 // as defined in https://github.com/grpc/grpc/blob/master/doc/naming.md.
-type Discoverer interface {
+type TargetDiscoverer interface {
 	// Discover invokes o.TargetDiscovered() when a new target is discovered.
 	//
 	// Each invocation is made on its own goroutine. The context passed to
@@ -49,7 +49,7 @@ type TargetObserver interface {
 // TargetObserverError indicates that a discoverer was stopped because a
 // TargetObserver produced an error.
 type TargetObserverError struct {
-	Discoverer Discoverer
+	Discoverer TargetDiscoverer
 	Observer   TargetObserver
 	Target     Target
 	Cause      error
@@ -76,7 +76,7 @@ func (e TargetObserverError) Error() string {
 // canceled, it returns nil.
 func targetDiscovered(
 	ctx context.Context,
-	d Discoverer,
+	d TargetDiscoverer,
 	o TargetObserver,
 	t Target,
 ) error {

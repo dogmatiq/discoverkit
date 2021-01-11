@@ -6,7 +6,7 @@ import (
 	"golang.org/x/sync/errgroup"
 )
 
-// StaticDiscoverer is a Discoverer that always "discovers" a fixed set of
+// StaticDiscoverer is a TargetDiscoverer that always "discovers" a fixed set of
 // pre-configured targets.
 type StaticDiscoverer []Target
 
