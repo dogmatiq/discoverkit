@@ -41,7 +41,7 @@ var _ = Describe("type DNSDiscoverer", func() {
 		cancel()
 	})
 
-	Describe("func Discover()", func() {
+	Describe("func DiscoverTargets()", func() {
 		It("invokes the observer when a target is discovered", func() {
 			res.LookupHostFunc = func(_ context.Context, host string) ([]string, error) {
 				cancel()
@@ -66,7 +66,7 @@ var _ = Describe("type DNSDiscoverer", func() {
 				return nil
 			}
 
-			err := disc.Discover(ctx, obs)
+			err := disc.DiscoverTargets(ctx, obs)
 			Expect(err).To(Equal(context.Canceled))
 			Expect(targets).To(ConsistOf(
 				Target{Name: "<addr-1>"},
@@ -113,7 +113,7 @@ var _ = Describe("type DNSDiscoverer", func() {
 
 			result := make(chan error, 1)
 			go func() {
-				result <- disc.Discover(ctx, obs)
+				result <- disc.DiscoverTargets(ctx, obs)
 			}()
 
 			select {
@@ -163,7 +163,7 @@ var _ = Describe("type DNSDiscoverer", func() {
 				return ctx.Err()
 			}
 
-			err := disc.Discover(ctx, obs)
+			err := disc.DiscoverTargets(ctx, obs)
 			Expect(err).To(Equal(context.Canceled))
 			Expect(atomic.LoadInt32(&running)).To(BeZero())
 		})
@@ -188,7 +188,7 @@ var _ = Describe("type DNSDiscoverer", func() {
 				return nil
 			}
 
-			err := disc.Discover(ctx, obs)
+			err := disc.DiscoverTargets(ctx, obs)
 			Expect(err).To(Equal(context.Canceled))
 		})
 
@@ -222,7 +222,7 @@ var _ = Describe("type DNSDiscoverer", func() {
 					return nil
 				}
 
-				err := disc.Discover(ctx, obs)
+				err := disc.DiscoverTargets(ctx, obs)
 				Expect(err).To(Equal(context.Canceled))
 				Expect(targets).To(ConsistOf(
 					Target{Name: "<addr-1>-A"},
@@ -268,7 +268,7 @@ var _ = Describe("type DNSDiscoverer", func() {
 					return errors.New("unexpected call to TargetDiscovered()")
 				}
 
-				err := disc.Discover(ctx, obs)
+				err := disc.DiscoverTargets(ctx, obs)
 				Expect(err).To(Equal(context.Canceled))
 			})
 
@@ -281,7 +281,7 @@ var _ = Describe("type DNSDiscoverer", func() {
 					return []string{"<addr>"}, nil
 				}
 
-				err := disc.Discover(ctx, obs)
+				err := disc.DiscoverTargets(ctx, obs)
 				Expect(err).To(MatchError("<error>"))
 			})
 		})
@@ -295,7 +295,7 @@ var _ = Describe("type DNSDiscoverer", func() {
 					}
 				}
 
-				err := disc.Discover(ctx, obs)
+				err := disc.DiscoverTargets(ctx, obs)
 				Expect(err).To(Equal(context.Canceled)) // note: not the net.DNSError
 			})
 
@@ -304,7 +304,7 @@ var _ = Describe("type DNSDiscoverer", func() {
 					return nil, errors.New("<error>")
 				}
 
-				err := disc.Discover(ctx, obs)
+				err := disc.DiscoverTargets(ctx, obs)
 				Expect(err).To(MatchError("<error>"))
 			})
 		})

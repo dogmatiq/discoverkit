@@ -57,7 +57,7 @@ type DNSDiscoverer struct {
 	observer TargetObserver
 }
 
-// Discover invokes o.TargetDiscovered() when a new target is discovered.
+// DiscoverTargets invokes o.TargetDiscovered() when a new target is discovered.
 //
 // Each invocation is made on its own goroutine. The context passed to
 // o.TargetDiscovered() is canceled when the target becomes unavailable, or the
@@ -65,7 +65,7 @@ type DNSDiscoverer struct {
 //
 // The discoverer stops and returns a TargetObserverError if any call to
 // o.TargetDiscovered() returns a non-nil error.
-func (d *DNSDiscoverer) Discover(ctx context.Context, o TargetObserver) error {
+func (d *DNSDiscoverer) DiscoverTargets(ctx context.Context, o TargetObserver) error {
 	d.group, ctx = errgroup.WithContext(ctx)
 	d.known = map[string]context.CancelFunc{}
 	d.observer = o

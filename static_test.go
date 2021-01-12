@@ -58,7 +58,7 @@ var _ = Describe("type StaticDiscoverer", func() {
 				return nil
 			}
 
-			err := disc.Discover(ctx, obs)
+			err := disc.DiscoverTargets(ctx, obs)
 			Expect(err).To(Equal(context.Canceled))
 			Expect(targets).To(ConsistOf(disc))
 		})
@@ -81,7 +81,7 @@ var _ = Describe("type StaticDiscoverer", func() {
 				return ctx.Err()
 			}
 
-			err := disc.Discover(ctx, obs)
+			err := disc.DiscoverTargets(ctx, obs)
 			Expect(err).To(Equal(context.Canceled))
 			Expect(atomic.LoadInt32(&running)).To(BeZero())
 		})
@@ -98,7 +98,7 @@ var _ = Describe("type StaticDiscoverer", func() {
 				return nil
 			}
 
-			err := disc.Discover(ctx, obs)
+			err := disc.DiscoverTargets(ctx, obs)
 			Expect(err).To(Equal(TargetObserverError{
 				Discoverer: disc,
 				Observer:   obs,
