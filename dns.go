@@ -145,6 +145,7 @@ func (d *DNSTargetDiscoverer) sync(
 		for _, t := range targets {
 			t := t // capture loop variable
 			d.group.Go(func() error {
+				defer cancel()
 				return targetDiscovered(addrCtx, d, d.observer, t)
 			})
 		}
