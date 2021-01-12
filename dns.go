@@ -11,7 +11,7 @@ import (
 )
 
 // DNSResolver is an interface for the subset of net.Resolver used by
-// DNSDiscoverer.
+// DNSTargetDiscoverer.
 type DNSResolver interface {
 	LookupHost(ctx context.Context, host string) ([]string, error)
 }
@@ -22,12 +22,12 @@ const (
 	DefaultDNSQueryInterval = 10 * time.Second
 )
 
-// DNSDiscoverer is a TargetDiscoverer that performs a DNS query to discover
-// targets.
+// DNSTargetDiscoverer is a TargetDiscoverer that performs a DNS query to
+// discover targets.
 //
 // It queries a single host and treats each A, AAAA or CNAME record in the
 // result as a distinct target. This is not a DNS-SD implementation.
-type DNSDiscoverer struct {
+type DNSTargetDiscoverer struct {
 	// QueryHost is the hostname that is queried.
 	QueryHost string
 
@@ -65,7 +65,7 @@ type DNSDiscoverer struct {
 //
 // The discoverer stops and returns a TargetObserverError if any call to
 // o.TargetDiscovered() returns a non-nil error.
-func (d *DNSDiscoverer) DiscoverTargets(ctx context.Context, o TargetObserver) error {
+func (d *DNSTargetDiscoverer) DiscoverTargets(ctx context.Context, o TargetObserver) error {
 	d.group, ctx = errgroup.WithContext(ctx)
 	d.known = map[string]context.CancelFunc{}
 	d.observer = o
@@ -83,7 +83,7 @@ func (d *DNSDiscoverer) DiscoverTargets(ctx context.Context, o TargetObserver) e
 
 // discover periodically queries the DNS server and starts/stops observer
 // goroutines as necessary.
-func (d *DNSDiscoverer) discover(ctx context.Context) error {
+func (d *DNSTargetDiscoverer) discover(ctx context.Context) error {
 	for {
 		// Perform the DNS query.
 		results, err := d.query(ctx)
@@ -109,7 +109,7 @@ func (d *DNSDiscoverer) discover(ctx context.Context) error {
 
 // sync synchronizes the state of running observers based on a new set of DNS
 // query results.
-func (d *DNSDiscoverer) sync(
+func (d *DNSTargetDiscoverer) sync(
 	ctx context.Context,
 	results map[string]struct{},
 ) error {
@@ -158,7 +158,7 @@ func (d *DNSDiscoverer) sync(
 //
 // It returns the resulting addresses as a set with names transformed to
 // lowercase. Individual addresses may be hostnames or IP addresses.
-func (d *DNSDiscoverer) query(ctx context.Context) (map[string]struct{}, error) {
+func (d *DNSTargetDiscoverer) query(ctx context.Context) (map[string]struct{}, error) {
 	r := d.Resolver
 	if r == nil {
 		r = net.DefaultResolver
@@ -187,7 +187,7 @@ func (d *DNSDiscoverer) query(ctx context.Context) (map[string]struct{}, error) 
 }
 
 // newTarget returns the targets at the given address.
-func (d *DNSDiscoverer) newTargets(ctx context.Context, addr string) ([]Target, error) {
+func (d *DNSTargetDiscoverer) newTargets(ctx context.Context, addr string) ([]Target, error) {
 	if d.NewTargets != nil {
 		return d.NewTargets(ctx, addr)
 	}

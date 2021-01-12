@@ -14,13 +14,13 @@ import (
 	. "github.com/onsi/gomega"
 )
 
-var _ = Describe("type DNSDiscoverer", func() {
+var _ = Describe("type DNSTargetDiscoverer", func() {
 	var (
 		ctx    context.Context
 		cancel context.CancelFunc
 		obs    *targetObserverStub
 		res    *dnsResolverStub
-		disc   *DNSDiscoverer
+		disc   *DNSTargetDiscoverer
 	)
 
 	BeforeEach(func() {
@@ -31,7 +31,7 @@ var _ = Describe("type DNSDiscoverer", func() {
 
 		res = &dnsResolverStub{}
 
-		disc = &DNSDiscoverer{
+		disc = &DNSTargetDiscoverer{
 			QueryHost: "<query-host>",
 			Resolver:  res,
 		}

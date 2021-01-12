@@ -6,9 +6,9 @@ import (
 	"golang.org/x/sync/errgroup"
 )
 
-// StaticDiscoverer is a TargetDiscoverer that always "discovers" a fixed set of
-// pre-configured targets.
-type StaticDiscoverer []Target
+// StaticTargetDiscoverer is a TargetDiscoverer that always "discovers" a fixed
+// set of pre-configured targets.
+type StaticTargetDiscoverer []Target
 
 // DiscoverTargets invokes o.TargetDiscovered() when a new target is discovered.
 //
@@ -18,7 +18,7 @@ type StaticDiscoverer []Target
 //
 // The discoverer stops and returns a TargetObserverError if any call to
 // o.TargetDiscovered() returns a non-nil error.
-func (d StaticDiscoverer) DiscoverTargets(ctx context.Context, o TargetObserver) error {
+func (d StaticTargetDiscoverer) DiscoverTargets(ctx context.Context, o TargetObserver) error {
 	g, ctx := errgroup.WithContext(ctx)
 
 	for _, t := range d {

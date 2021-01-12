@@ -12,12 +12,12 @@ import (
 	. "github.com/onsi/gomega"
 )
 
-var _ = Describe("type StaticDiscoverer", func() {
+var _ = Describe("type StaticTargetDiscoverer", func() {
 	var (
 		ctx    context.Context
 		cancel context.CancelFunc
 		obs    *targetObserverStub
-		disc   StaticDiscoverer
+		disc   StaticTargetDiscoverer
 	)
 
 	BeforeEach(func() {
@@ -26,7 +26,7 @@ var _ = Describe("type StaticDiscoverer", func() {
 
 		obs = &targetObserverStub{}
 
-		disc = StaticDiscoverer{
+		disc = StaticTargetDiscoverer{
 			{Name: "<target-1>"},
 			{Name: "<target-2>"},
 		}
