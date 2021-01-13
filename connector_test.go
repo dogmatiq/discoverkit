@@ -115,7 +115,7 @@ var _ = Describe("type Connector", func() {
 
 		When("the dialer returns an error", func() {
 			BeforeEach(func() {
-				connector.Dial = func(string, ...grpc.DialOption) (*grpc.ClientConn, error) {
+				connector.Dial = func(context.Context, string, ...grpc.DialOption) (*grpc.ClientConn, error) {
 					return nil, errors.New("<error>")
 				}
 			})

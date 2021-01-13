@@ -16,8 +16,8 @@ type Connector struct {
 
 	// Dial is the function used to dial gRPC targets.
 	//
-	// If it is nil, grpc.Dial() is used.
-	Dial func(string, ...grpc.DialOption) (*grpc.ClientConn, error)
+	// If it is nil, grpc.DialContext() is used.
+	Dial Dialer
 
 	// DialOptions is a set of default gRPC dial options that are applied
 	// before each target's own dial options.
@@ -33,6 +33,11 @@ type Connector struct {
 	Ignore func(context.Context, Target) (bool, error)
 }
 
+// Dialer is a function for connecting to gRPC targets.
+//
+// It matches the signature of grpc.DialContext().
+type Dialer func(context.Context, string, ...grpc.DialOption) (*grpc.ClientConn, error)
+
 // TargetDiscovered is called when a new target is discovered.
 //
 // ctx is canceled if the target becomes unavailable while TargetDiscovered() is
@@ -47,14 +52,14 @@ func (c *Connector) TargetDiscovered(ctx context.Context, t Target) error {
 
 	dial := c.Dial
 	if dial == nil {
-		dial = grpc.Dial
+		dial = grpc.DialContext
 	}
 
 	var options []grpc.DialOption
 	options = append(options, c.DialOptions...)
 	options = append(options, t.DialOptions...)
 
-	conn, err := dial(t.Name, options...)
+	conn, err := dial(ctx, t.Name, options...)
 	if err != nil {
 		return err
 	}
