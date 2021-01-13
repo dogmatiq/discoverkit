@@ -20,24 +20,6 @@ type Target struct {
 	DialOptions []grpc.DialOption
 }
 
-// TargetDiscoverer is an interface for services that discover gRPC targets.
-//
-// A "target" is some endpoint that can be dialed using gRPC. It is typically a
-// single gRPC server, but may be anything that can be referred to by a "name"
-// as defined in https://github.com/grpc/grpc/blob/master/doc/naming.md.
-type TargetDiscoverer interface {
-	// DiscoverTargets invokes o.TargetDiscovered() when a new target is
-	// discovered.
-	//
-	// Each invocation is made on its own goroutine. The context passed to
-	// o.TargetDiscovered() is canceled when the target becomes unavailable, or
-	// the discoverer itself is stopped due to cancelation of ctx.
-	//
-	// The discoverer stops and returns a TargetObserverError if any call to
-	// o.TargetDiscovered() returns a non-nil error.
-	DiscoverTargets(ctx context.Context, o TargetObserver) error
-}
-
 // TargetObserver is an interface for handling the discovery of a target.
 type TargetObserver interface {
 	// TargetDiscovered is called when a new target is discovered.
@@ -66,6 +48,24 @@ func (e TargetObserverError) Error() string {
 		e.Target.Name,
 		e.Cause,
 	)
+}
+
+// TargetDiscoverer is an interface for services that discover gRPC targets.
+//
+// A "target" is some endpoint that can be dialed using gRPC. It is typically a
+// single gRPC server, but may be anything that can be referred to by a "name"
+// as defined in https://github.com/grpc/grpc/blob/master/doc/naming.md.
+type TargetDiscoverer interface {
+	// DiscoverTargets invokes o.TargetDiscovered() when a new target is
+	// discovered.
+	//
+	// Each invocation is made on its own goroutine. The context passed to
+	// o.TargetDiscovered() is canceled when the target becomes unavailable, or
+	// the discoverer itself is stopped due to cancelation of ctx.
+	//
+	// The discoverer stops and returns a TargetObserverError if any call to
+	// o.TargetDiscovered() returns a non-nil error.
+	DiscoverTargets(ctx context.Context, o TargetObserver) error
 }
 
 // targetDiscovered calls o.TargetDiscovered().
