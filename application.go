@@ -55,7 +55,7 @@ func (e ApplicationObserverError) Error() string {
 	)
 }
 
-// ApplicationDiscoverer is an service for discovers Dogma applications running
+// ApplicationDiscoverer is a service that discovers Dogma applications running
 // on gRPC targets.
 //
 // It implements ConnectObserver and forwards to an ApplicationObserver.
@@ -205,7 +205,6 @@ func (d *ApplicationDiscoverer) recv(
 			// This approach is taken (as opposed to returning the error) so
 			// that we can continue to use other applications with well-formed
 			// identities on the same server.
-
 			if d.LogError != nil {
 				err = fmt.Errorf("invalid application identity: %w", err)
 				d.LogError(c, err)
