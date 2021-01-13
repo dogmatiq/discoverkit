@@ -111,8 +111,11 @@ var _ = Describe("type Server", func() {
 
 			server.Available(app1)
 
+			// Annoyingly, stream.Recv() can represent a deadline error in at
+			// least 3 different ways, so we just perform a substring match.
 			_, err = stream.Recv()
-			Expect(err).To(MatchError("rpc error: code = DeadlineExceeded desc = context deadline exceeded"))
+			Expect(err).Should(HaveOccurred())
+			Expect(err.Error()).To(ContainSubstring("context deadline exceeded"))
 		})
 
 		It("does not block if there are slow consumers", func() {
@@ -132,8 +135,11 @@ var _ = Describe("type Server", func() {
 			stream, err := cli.WatchApplications(ctx, &discoverspec.WatchApplicationsRequest{})
 			Expect(err).ShouldNot(HaveOccurred())
 
+			// Annoyingly, stream.Recv() can represent a deadline error in at
+			// least 3 different ways, so we just perform a substring match.
 			_, err = stream.Recv()
-			Expect(err).To(MatchError("rpc error: code = DeadlineExceeded desc = context deadline exceeded"))
+			Expect(err).Should(HaveOccurred())
+			Expect(err.Error()).To(ContainSubstring("context deadline exceeded"))
 		})
 
 		It("notifies existing watchers that the application is unavailable", func() {
