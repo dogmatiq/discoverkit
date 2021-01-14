@@ -3,10 +3,7 @@ package discoverkit_test
 import (
 	"context"
 	"errors"
-	"fmt"
 	"net"
-	"sync"
-	"sync/atomic"
 	"time"
 
 	. "github.com/dogmatiq/discoverkit"
@@ -18,15 +15,11 @@ var _ = Describe("type DNSTargetDiscoverer", func() {
 	var (
 		ctx    context.Context
 		cancel context.CancelFunc
-		obs    *targetObserverStub
 		disc   *DNSTargetDiscoverer
 	)
 
 	BeforeEach(func() {
 		ctx, cancel = context.WithTimeout(context.Background(), 1*time.Second)
-		ctx, cancel = context.WithCancel(ctx)
-
-		obs = &targetObserverStub{}
 
 		disc = &DNSTargetDiscoverer{
 			QueryHost: "<query-host>",
@@ -53,16 +46,16 @@ var _ = Describe("type DNSTargetDiscoverer", func() {
 
 			var targets []Target
 
-			obs.TargetDiscoveredFunc = func(
-				_ context.Context,
-				t Target,
-			) error {
-				targets = append(targets, t)
+			err := disc.DiscoverTargets(
+				ctx,
+				func(
+					_ context.Context,
+					t Target,
+				) {
+					targets = append(targets, t)
+				},
+			)
 
-				return nil
-			}
-
-			err := disc.DiscoverTargets(ctx, obs)
 			Expect(err).To(Equal(context.Canceled))
 			Expect(targets).To(ConsistOf(
 				Target{Name: "<addr-1>"},
@@ -83,113 +76,93 @@ var _ = Describe("type DNSTargetDiscoverer", func() {
 				return []string{"<addr-1>", "<addr-2>"}, nil
 			}
 
-			ok := make(chan struct{})
+			done := make(chan struct{})
 
-			obs.TargetDiscoveredFunc = func(
-				targetCtx context.Context,
-				t Target,
-			) error {
-				<-targetCtx.Done()
-
-				// We expect "<addr-1>" to become unavailable based on the setup
-				// of disc.LookupHost above.
-				if t.Name == "<addr-1>" {
-					close(ok)
-					return nil
-				}
-
-				// Otherwise we would expect only to be canceled when the
-				// discover is stopped by cancelling the parent context.
-				if ctx.Err() == nil {
-					return fmt.Errorf("unexpected cancelation for %s", t.Name)
-				}
-
-				return nil
-			}
-
-			result := make(chan error, 1)
-			go func() {
-				result <- disc.DiscoverTargets(ctx, obs)
-			}()
+			go disc.DiscoverTargets(
+				ctx,
+				func(
+					targetCtx context.Context,
+					t Target,
+				) {
+					if t.Name == "<addr-1>" {
+						go func() {
+							<-targetCtx.Done()
+							close(done)
+						}()
+					}
+				},
+			)
 
 			select {
-			case <-ok:
-				// We expect the "ok" channel to be closed when the context
-				// associated with "<addr-1>" is canceled.
-				cancel() // stop the discoverer
-
-			case err := <-result:
-				// We don't expect the discoverer to stop before "ok" is closed.
-				Expect(err).ShouldNot(HaveOccurred(), "discoverer stopped prematurely")
-
+			case <-done:
 			case <-ctx.Done():
-				// We don't expect the parent context to be canceled before "ok"
-				// is closed.
-				Expect(ctx.Err()).ShouldNot(HaveOccurred(), "context canceled prematurely")
+				Expect(ctx.Err()).ShouldNot(HaveOccurred())
 			}
-
-			// Now that we called cancel() we expect the discoverer to stop in a
-			// timely manner.
-			err := <-result
-			Expect(err).To(Equal(context.Canceled))
 		})
 
-		It("cancels the context passed to the observer when the discoverer is stopped", func() {
-			disc.QueryInterval = 10 * time.Millisecond
+		It("cancels the observer context when the discoverer is stopped", func() {
+			discoverCtx, cancel := context.WithCancel(ctx)
 
 			disc.LookupHost = func(context.Context, string) ([]string, error) {
 				cancel()
 				return []string{"<addr-1>", "<addr-2>"}, nil
 			}
 
-			var running int32 // atomic
+			done := make(chan struct{}, 2)
 
-			obs.TargetDiscoveredFunc = func(
-				ctx context.Context,
-				_ Target,
-			) error {
-				n := atomic.AddInt32(&running, 1)
-				defer atomic.AddInt32(&running, -1)
+			err := disc.DiscoverTargets(
+				discoverCtx,
+				func(
+					targetCtx context.Context,
+					t Target,
+				) {
+					go func() {
+						<-targetCtx.Done()
+						done <- struct{}{}
+					}()
+				},
+			)
 
-				if int(n) == 2 {
-					go cancel()
-				}
+			Expect(err).To(Equal(context.Canceled))
 
-				<-ctx.Done()
-				return ctx.Err()
+			select {
+			case <-done:
+			case <-ctx.Done():
+				Expect(ctx.Err()).ShouldNot(HaveOccurred())
 			}
 
-			err := disc.DiscoverTargets(ctx, obs)
-			Expect(err).To(Equal(context.Canceled))
-			Expect(atomic.LoadInt32(&running)).To(BeZero())
+			select {
+			case <-done:
+			case <-ctx.Done():
+				Expect(ctx.Err()).ShouldNot(HaveOccurred())
+			}
 		})
 
 		It("uses net.DefaultResolver.LookupHost() by default", func() {
 			disc.QueryHost = "localhost"
 			disc.LookupHost = nil
 
-			obs.TargetDiscoveredFunc = func(
-				_ context.Context,
-				t Target,
-			) error {
-				cancel()
+			err := disc.DiscoverTargets(
+				ctx,
+				func(
+					_ context.Context,
+					t Target,
+				) {
+					cancel()
+					Expect(t.Name).To(
+						Or(
+							Equal("127.0.0.1"),
+							Equal("::1"),
+						),
+					)
+				},
+			)
 
-				Expect(t.Name).To(
-					Or(
-						Equal("127.0.0.1"),
-						Equal("::1"),
-					),
-				)
-
-				return nil
-			}
-
-			err := disc.DiscoverTargets(ctx, obs)
 			Expect(err).To(Equal(context.Canceled))
 		})
 
 		When("there is a NewTargets() function", func() {
-			It("uses the targets returned by NewTargets()", func() {
+			It("passes the targets returned by NewTargets() to the observer", func() {
 				disc.NewTargets = func(_ context.Context, addr string) ([]Target, error) {
 					return []Target{
 						{Name: addr + "-A"},
@@ -202,23 +175,18 @@ var _ = Describe("type DNSTargetDiscoverer", func() {
 					return []string{"<addr-1>", "<addr-2>"}, nil
 				}
 
-				var (
-					m       sync.Mutex
-					targets []Target
+				var targets []Target
+
+				err := disc.DiscoverTargets(
+					ctx,
+					func(
+						_ context.Context,
+						t Target,
+					) {
+						targets = append(targets, t)
+					},
 				)
 
-				obs.TargetDiscoveredFunc = func(
-					_ context.Context,
-					t Target,
-				) error {
-					m.Lock()
-					targets = append(targets, t)
-					m.Unlock()
-
-					return nil
-				}
-
-				err := disc.DiscoverTargets(ctx, obs)
 				Expect(err).To(Equal(context.Canceled))
 				Expect(targets).To(ConsistOf(
 					Target{Name: "<addr-1>-A"},
@@ -226,6 +194,31 @@ var _ = Describe("type DNSTargetDiscoverer", func() {
 					Target{Name: "<addr-2>-A"},
 					Target{Name: "<addr-2>-B"},
 				))
+			})
+
+			It("allows NewTargets() to return an empty slice", func() {
+				disc.QueryInterval = 10 * time.Millisecond
+
+				disc.LookupHost = func(context.Context, string) ([]string, error) {
+					cancel()
+					return []string{"<addr>"}, nil
+				}
+
+				disc.NewTargets = func(context.Context, string) ([]Target, error) {
+					return nil, nil
+				}
+
+				err := disc.DiscoverTargets(
+					ctx,
+					func(
+						context.Context,
+						Target,
+					) {
+						Fail("unexpected call")
+					},
+				)
+
+				Expect(err).To(Equal(context.Canceled))
 			})
 
 			It("does not call NewTargets() again for an address that already produced zero targets", func() {
@@ -257,14 +250,7 @@ var _ = Describe("type DNSTargetDiscoverer", func() {
 					return []string{"<addr>"}, nil
 				}
 
-				obs.TargetDiscoveredFunc = func(
-					context.Context,
-					Target,
-				) error {
-					return errors.New("unexpected call to TargetDiscovered()")
-				}
-
-				err := disc.DiscoverTargets(ctx, obs)
+				err := disc.DiscoverTargets(ctx, nil)
 				Expect(err).To(Equal(context.Canceled))
 			})
 
@@ -277,7 +263,7 @@ var _ = Describe("type DNSTargetDiscoverer", func() {
 					return []string{"<addr>"}, nil
 				}
 
-				err := disc.DiscoverTargets(ctx, obs)
+				err := disc.DiscoverTargets(ctx, nil)
 				Expect(err).To(MatchError("<error>"))
 			})
 		})
@@ -291,7 +277,7 @@ var _ = Describe("type DNSTargetDiscoverer", func() {
 					}
 				}
 
-				err := disc.DiscoverTargets(ctx, obs)
+				err := disc.DiscoverTargets(ctx, nil)
 				Expect(err).To(Equal(context.Canceled)) // note: not the net.DNSError
 			})
 
@@ -300,7 +286,7 @@ var _ = Describe("type DNSTargetDiscoverer", func() {
 					return nil, errors.New("<error>")
 				}
 
-				err := disc.DiscoverTargets(ctx, obs)
+				err := disc.DiscoverTargets(ctx, nil)
 				Expect(err).To(MatchError("<error>"))
 			})
 		})
