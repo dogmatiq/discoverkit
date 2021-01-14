@@ -10,12 +10,6 @@ import (
 	"golang.org/x/sync/errgroup"
 )
 
-// DNSResolver is an interface for the subset of net.Resolver used by
-// DNSTargetDiscoverer.
-type DNSResolver interface {
-	LookupHost(ctx context.Context, host string) ([]string, error)
-}
-
 const (
 	// DefaultDNSQueryInterval is the default interval at which DNS queries are
 	// performed.
@@ -42,10 +36,10 @@ type DNSTargetDiscoverer struct {
 	// explicit port is specified.
 	NewTargets func(ctx context.Context, addr string) (targets []Target, err error)
 
-	// Resolver is the DNS resolver used to make queries.
+	// LookupHost is the function used to query the host.
 	//
-	// If it is nil, net.DefaultResolver is used.
-	Resolver DNSResolver
+	// If it is nil, net.DefaultResolver.LookupHost() is used.
+	LookupHost func(ctx context.Context, host string) (addresses []string, err error)
 
 	// QueryInterval is the interval at which DNS queries are performed.
 	//
@@ -160,12 +154,12 @@ func (d *DNSTargetDiscoverer) sync(
 // It returns the resulting addresses as a set with names transformed to
 // lowercase. Individual addresses may be hostnames or IP addresses.
 func (d *DNSTargetDiscoverer) query(ctx context.Context) (map[string]struct{}, error) {
-	r := d.Resolver
-	if r == nil {
-		r = net.DefaultResolver
+	lookupHost := d.LookupHost
+	if lookupHost == nil {
+		lookupHost = net.DefaultResolver.LookupHost
 	}
 
-	addrs, err := r.LookupHost(ctx, d.QueryHost)
+	addrs, err := lookupHost(ctx, d.QueryHost)
 	if err != nil {
 		if x, ok := err.(*net.DNSError); ok {
 			// Temporary network problems, or the fact that host doesn't exist

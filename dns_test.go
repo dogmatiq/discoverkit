@@ -19,7 +19,6 @@ var _ = Describe("type DNSTargetDiscoverer", func() {
 		ctx    context.Context
 		cancel context.CancelFunc
 		obs    *targetObserverStub
-		res    *dnsResolverStub
 		disc   *DNSTargetDiscoverer
 	)
 
@@ -29,11 +28,13 @@ var _ = Describe("type DNSTargetDiscoverer", func() {
 
 		obs = &targetObserverStub{}
 
-		res = &dnsResolverStub{}
-
 		disc = &DNSTargetDiscoverer{
 			QueryHost: "<query-host>",
-			Resolver:  res,
+			LookupHost: func(context.Context, string) ([]string, error) {
+				return nil, &net.DNSError{
+					IsNotFound: true,
+				}
+			},
 		}
 	})
 
@@ -43,25 +44,20 @@ var _ = Describe("type DNSTargetDiscoverer", func() {
 
 	Describe("func DiscoverTargets()", func() {
 		It("invokes the observer when a target is discovered", func() {
-			res.LookupHostFunc = func(_ context.Context, host string) ([]string, error) {
+			disc.LookupHost = func(_ context.Context, host string) ([]string, error) {
 				cancel()
 
 				Expect(host).To(Equal("<query-host>"))
 				return []string{"<addr-1>", "<addr-2>"}, nil
 			}
 
-			var (
-				m       sync.Mutex
-				targets []Target
-			)
+			var targets []Target
 
 			obs.TargetDiscoveredFunc = func(
 				_ context.Context,
 				t Target,
 			) error {
-				m.Lock()
 				targets = append(targets, t)
-				m.Unlock()
 
 				return nil
 			}
@@ -77,10 +73,10 @@ var _ = Describe("type DNSTargetDiscoverer", func() {
 		It("cancels the observer context when a target goes away", func() {
 			disc.QueryInterval = 10 * time.Millisecond
 
-			res.LookupHostFunc = func(context.Context, string) ([]string, error) {
+			disc.LookupHost = func(context.Context, string) ([]string, error) {
 				// Replace this function on the stub so that it returns a subset
 				// of the addresses that it returned the first time.
-				res.LookupHostFunc = func(context.Context, string) ([]string, error) {
+				disc.LookupHost = func(context.Context, string) ([]string, error) {
 					return []string{"<addr-2>"}, nil
 				}
 
@@ -96,7 +92,7 @@ var _ = Describe("type DNSTargetDiscoverer", func() {
 				<-targetCtx.Done()
 
 				// We expect "<addr-1>" to become unavailable based on the setup
-				// of res.LookupHostFunc above.
+				// of disc.LookupHost above.
 				if t.Name == "<addr-1>" {
 					close(ok)
 					return nil
@@ -141,7 +137,7 @@ var _ = Describe("type DNSTargetDiscoverer", func() {
 		It("cancels the context passed to the observer when the discoverer is stopped", func() {
 			disc.QueryInterval = 10 * time.Millisecond
 
-			res.LookupHostFunc = func(context.Context, string) ([]string, error) {
+			disc.LookupHost = func(context.Context, string) ([]string, error) {
 				cancel()
 				return []string{"<addr-1>", "<addr-2>"}, nil
 			}
@@ -168,9 +164,9 @@ var _ = Describe("type DNSTargetDiscoverer", func() {
 			Expect(atomic.LoadInt32(&running)).To(BeZero())
 		})
 
-		It("uses net.DefaultResolver by default", func() {
+		It("uses net.DefaultResolver.LookupHost() by default", func() {
 			disc.QueryHost = "localhost"
-			disc.Resolver = nil
+			disc.LookupHost = nil
 
 			obs.TargetDiscoveredFunc = func(
 				_ context.Context,
@@ -201,7 +197,7 @@ var _ = Describe("type DNSTargetDiscoverer", func() {
 					}, nil
 				}
 
-				res.LookupHostFunc = func(context.Context, string) ([]string, error) {
+				disc.LookupHost = func(context.Context, string) ([]string, error) {
 					cancel()
 					return []string{"<addr-1>", "<addr-2>"}, nil
 				}
@@ -245,10 +241,10 @@ var _ = Describe("type DNSTargetDiscoverer", func() {
 					return nil, nil
 				}
 
-				res.LookupHostFunc = func(context.Context, string) ([]string, error) {
+				disc.LookupHost = func(context.Context, string) ([]string, error) {
 					// Replace this function on the stub to cancel the context
 					// the *second* time that it is called.
-					res.LookupHostFunc = func(context.Context, string) ([]string, error) {
+					disc.LookupHost = func(context.Context, string) ([]string, error) {
 						cancel()
 
 						// Return the same address on this second invocation,
@@ -277,7 +273,7 @@ var _ = Describe("type DNSTargetDiscoverer", func() {
 					return nil, errors.New("<error>")
 				}
 
-				res.LookupHostFunc = func(context.Context, string) ([]string, error) {
+				disc.LookupHost = func(context.Context, string) ([]string, error) {
 					return []string{"<addr>"}, nil
 				}
 
@@ -288,7 +284,7 @@ var _ = Describe("type DNSTargetDiscoverer", func() {
 
 		When("the resolver returns an error", func() {
 			It("ignores not-found errors", func() {
-				res.LookupHostFunc = func(context.Context, string) ([]string, error) {
+				disc.LookupHost = func(context.Context, string) ([]string, error) {
 					cancel()
 					return nil, &net.DNSError{
 						IsNotFound: true,
@@ -300,7 +296,7 @@ var _ = Describe("type DNSTargetDiscoverer", func() {
 			})
 
 			It("returns other errors", func() {
-				res.LookupHostFunc = func(context.Context, string) ([]string, error) {
+				disc.LookupHost = func(context.Context, string) ([]string, error) {
 					return nil, errors.New("<error>")
 				}
 
@@ -310,19 +306,3 @@ var _ = Describe("type DNSTargetDiscoverer", func() {
 		})
 	})
 })
-
-// dnsResolverStub is a test implementation of the DNSResolver interface.
-type dnsResolverStub struct {
-	LookupHostFunc func(ctx context.Context, host string) ([]string, error)
-}
-
-// LookupHost calls r.LookHostFunc(ctx, host) if it is non-nil.
-func (r *dnsResolverStub) LookupHost(ctx context.Context, host string) ([]string, error) {
-	if r.LookupHostFunc == nil {
-		return nil, &net.DNSError{
-			IsNotFound: true,
-		}
-	}
-
-	return r.LookupHostFunc(ctx, host)
-}
