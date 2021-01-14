@@ -2,39 +2,28 @@ package discoverkit
 
 import (
 	"context"
-
-	"golang.org/x/sync/errgroup"
 )
 
 // StaticTargetDiscoverer is a TargetDiscoverer that always "discovers" a fixed
 // set of pre-configured targets.
 type StaticTargetDiscoverer []Target
 
-// DiscoverTargets invokes o.TargetDiscovered() when a new target is discovered.
+// DiscoverTargets invokes an observer for each gRPC target that is discovered.
 //
-// Each invocation is made on its own goroutine. The context passed to
-// o.TargetDiscovered() is canceled when the target becomes unavailable, or the
-// discoverer itself is stopped due to cancelation of ctx.
+// It runs until ctx is canceled or an error occurs.
 //
-// The discoverer stops and returns a TargetObserverError if any call to
-// o.TargetDiscovered() returns a non-nil error.
-func (d StaticTargetDiscoverer) DiscoverTargets(ctx context.Context, o TargetObserver) error {
-	g, ctx := errgroup.WithContext(ctx)
-
+// The context passed to the observer is canceled when the target becomes
+// unavailable or the discover is stopped.
+//
+// The discoverer MAY block on calls to the observer. It is the observer's
+// responsibility to start new goroutines to handle background tasks, as
+// appropriate.
+func (d StaticTargetDiscoverer) DiscoverTargets(ctx context.Context, obs TargetObserver) error {
 	for _, t := range d {
-		t := t // capture loop variable
-
-		g.Go(func() error {
-			return targetDiscovered(ctx, d, o, t)
-		})
+		obs(ctx, t)
 	}
 
-	if err := g.Wait(); err != nil {
-		return err
-	}
-
-	// All of the observer calls have returned successfully so there's nothing
-	// left to do except wait until ctx is canceled.
 	<-ctx.Done()
+
 	return ctx.Err()
 }

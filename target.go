@@ -2,7 +2,6 @@ package discoverkit
 
 import (
 	"context"
-	"fmt"
 
 	"google.golang.org/grpc"
 )
@@ -20,35 +19,16 @@ type Target struct {
 	DialOptions []grpc.DialOption
 }
 
-// TargetObserver is an interface for handling the discovery of a target.
-type TargetObserver interface {
-	// TargetDiscovered is called when a new target is discovered.
-	//
-	// ctx is canceled if the target becomes unavailable while
-	// TargetDiscovered() is still executing.
-	TargetDiscovered(ctx context.Context, t Target) error
-}
-
-// TargetObserverError indicates that a discoverer was stopped because a
-// TargetObserver produced an error.
-type TargetObserverError struct {
-	Discoverer TargetDiscoverer
-	Observer   TargetObserver
-	Target     Target
-	Cause      error
-}
-
-func (e TargetObserverError) Unwrap() error {
-	return e.Cause
-}
-
-func (e TargetObserverError) Error() string {
-	return fmt.Sprintf(
-		"failure observing '%s' target: %s",
-		e.Target.Name,
-		e.Cause,
-	)
-}
+// TargetObserver is a function that handles the discovery of a gRPC target.
+//
+// ctx is canceled when the target becomes unavailable or the discoverer is
+// stopped. ctx is NOT canceled when the observer function returns and as such
+// may be used by goroutines started by the observer.
+//
+// The discoverer MAY block on calls to the observer. It is the observer's
+// responsibility to start new goroutines to handle background tasks, as
+// appropriate.
+type TargetObserver func(ctx context.Context, t Target)
 
 // TargetDiscoverer is an interface for services that discover gRPC targets.
 //
@@ -56,45 +36,16 @@ func (e TargetObserverError) Error() string {
 // single gRPC server, but may be anything that can be referred to by a "name"
 // as defined in https://github.com/grpc/grpc/blob/master/doc/naming.md.
 type TargetDiscoverer interface {
-	// DiscoverTargets invokes o.TargetDiscovered() when a new target is
+	// DiscoverTargets invokes an observer for each gRPC target that is
 	// discovered.
 	//
-	// Each invocation is made on its own goroutine. The context passed to
-	// o.TargetDiscovered() is canceled when the target becomes unavailable, or
-	// the discoverer itself is stopped due to cancelation of ctx.
+	// It runs until ctx is canceled or an error occurs.
 	//
-	// The discoverer stops and returns a TargetObserverError if any call to
-	// o.TargetDiscovered() returns a non-nil error.
-	DiscoverTargets(ctx context.Context, o TargetObserver) error
-}
-
-// targetDiscovered calls o.TargetDiscovered().
-//
-// If o.TargetDiscovered() returns a non-nil error it returns a
-// TargetObserverError.
-//
-// If o.TargetDiscovered() returns a context.Canceled error *and* ctx is
-// canceled, it returns nil.
-func targetDiscovered(
-	ctx context.Context,
-	d TargetDiscoverer,
-	o TargetObserver,
-	t Target,
-) error {
-	err := o.TargetDiscovered(ctx, t)
-
-	if err == nil {
-		return nil
-	}
-
-	if err == context.Canceled && ctx.Err() == context.Canceled {
-		return nil
-	}
-
-	return TargetObserverError{
-		Discoverer: d,
-		Observer:   o,
-		Target:     t,
-		Cause:      err,
-	}
+	// The context passed to the observer is canceled when the target becomes
+	// unavailable or the discover is stopped.
+	//
+	// The discoverer MAY block on calls to the observer. It is the observer's
+	// responsibility to start new goroutines to handle background tasks, as
+	// appropriate.
+	DiscoverTargets(ctx context.Context, obs TargetObserver) error
 }

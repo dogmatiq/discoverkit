@@ -7,7 +7,6 @@ import (
 	"time"
 
 	"github.com/dogmatiq/linger"
-	"golang.org/x/sync/errgroup"
 )
 
 const (
@@ -45,39 +44,27 @@ type DNSTargetDiscoverer struct {
 	//
 	// If it is non-positive, the DefaultDNSQueryInterval constant is used.
 	QueryInterval time.Duration
-
-	group    *errgroup.Group
-	known    map[string]context.CancelFunc
-	observer TargetObserver
 }
 
-// DiscoverTargets invokes o.TargetDiscovered() when a new target is discovered.
+// DiscoverTargets invokes an observer for each gRPC target that is discovered.
 //
-// Each invocation is made on its own goroutine. The context passed to
-// o.TargetDiscovered() is canceled when the target becomes unavailable, or the
-// discoverer itself is stopped due to cancelation of ctx.
+// It runs until ctx is canceled or an error occurs.
 //
-// The discoverer stops and returns a TargetObserverError if any call to
-// o.TargetDiscovered() returns a non-nil error.
-func (d *DNSTargetDiscoverer) DiscoverTargets(ctx context.Context, o TargetObserver) error {
-	d.group, ctx = errgroup.WithContext(ctx)
-	d.known = map[string]context.CancelFunc{}
-	d.observer = o
+// The context passed to the observer is canceled when the target becomes
+// unavailable or the discover is stopped.
+//
+// The discoverer MAY block on calls to the observer. It is the observer's
+// responsibility to start new goroutines to handle background tasks, as
+// appropriate.
+func (d *DNSTargetDiscoverer) DiscoverTargets(ctx context.Context, obs TargetObserver) error {
+	addresses := map[string]context.CancelFunc{}
 
-	d.group.Go(func() error {
-		// Perform the actual discovery within the same group as the observer
-		// goroutines. This ensures both that Wait() always has something to
-		// wait for, so that it doesn't just return immediately, and that the
-		// whole group is shutdown if the discovery process itself fails.
-		return d.discover(ctx)
-	})
+	defer func() {
+		for _, cancel := range addresses {
+			cancel()
+		}
+	}()
 
-	return d.group.Wait()
-}
-
-// discover periodically queries the DNS server and starts/stops observer
-// goroutines as necessary.
-func (d *DNSTargetDiscoverer) discover(ctx context.Context) error {
 	for {
 		// Perform the DNS query.
 		results, err := d.query(ctx)
@@ -85,8 +72,9 @@ func (d *DNSTargetDiscoverer) discover(ctx context.Context) error {
 			return err
 		}
 
-		// Start and stop observer goroutines to match the new results.
-		if err := d.sync(ctx, results); err != nil {
+		// Invoke the observer / cancel contexts to sync the observer state with
+		// the new results.
+		if err := d.sync(ctx, addresses, results, obs); err != nil {
 			return err
 		}
 
@@ -105,11 +93,13 @@ func (d *DNSTargetDiscoverer) discover(ctx context.Context) error {
 // query results.
 func (d *DNSTargetDiscoverer) sync(
 	ctx context.Context,
+	addresses map[string]context.CancelFunc,
 	results map[string]struct{},
+	obs TargetObserver,
 ) error {
 	// First we check through the known addresses to work out which ones are
 	// still in the latest query results.
-	for addr, cancel := range d.known {
+	for addr, cancel := range addresses {
 		if _, ok := results[addr]; ok {
 			// This address is still avaliable. Remove it from the query results
 			// so we're left only with addresses that we have not seen before.
@@ -117,7 +107,7 @@ func (d *DNSTargetDiscoverer) sync(
 		} else {
 			// This address is no longer in the results. Cancel the associated
 			// context to stop the observer goroutines.
-			delete(d.known, addr)
+			delete(addresses, addr)
 			cancel()
 		}
 	}
@@ -133,15 +123,11 @@ func (d *DNSTargetDiscoverer) sync(
 		// Create a new context specifically for this address. It will be
 		// canceled if the address dissappears from the query results.
 		addrCtx, cancel := context.WithCancel(ctx)
-		d.known[addr] = cancel
+		addresses[addr] = cancel
 
-		// Start a new goroutine for each target.
+		// Invoke the observer for each target.
 		for _, t := range targets {
-			t := t // capture loop variable
-			d.group.Go(func() error {
-				defer cancel()
-				return targetDiscovered(addrCtx, d, d.observer, t)
-			})
+			obs(addrCtx, t)
 		}
 	}
 
