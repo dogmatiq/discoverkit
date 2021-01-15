@@ -71,7 +71,7 @@ type ApplicationDiscoverer struct {
 // the DiscoverAPI service. Otherwise, it runs until ctx is canceled.
 //
 // Errors that occur while communicating with the target are logged to the
-// LogError function,if present, before retrying. The retry interval is
+// LogError function, if present, before retrying. The retry interval is
 // determined by the discoverer's BackoffStrategy.
 //
 // The context passed to the observer is canceled when the application becomes
