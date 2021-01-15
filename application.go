@@ -7,7 +7,7 @@ import (
 	"github.com/dogmatiq/configkit"
 	"github.com/dogmatiq/interopspec/discoverspec"
 	"github.com/dogmatiq/linger/backoff"
-	"golang.org/x/sync/errgroup"
+	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 )
@@ -17,56 +17,43 @@ type Application struct {
 	// Identity is the application's identity.
 	Identity configkit.Identity
 
+	// Target is the gRPC target that is hosting the application.
+	Target Target
+
 	// Connection is the connection that was used to discover the application.
-	Connection Connection
+	Connection grpc.ClientConnInterface
 }
 
-// ApplicationObserver is an interface for handling the discovery of Dogma
-// applications.
-type ApplicationObserver interface {
-	// ApplicationDiscovered is called when a new application becomes available.
-	//
-	// ctx is canceled if the application becomes unavailable while
-	// ApplicationDiscovered() is still executing.
-	//
-	// Note that it is possible for a single application identity to be
-	// available via several connections.
-	ApplicationDiscovered(ctx context.Context, a Application) error
-}
+// ApplicationObserver is a function that handles the discovery of a Dogma
+// application running on a gRPC target.
+//
+// ctx is canceled when the application becomes unavailable or the discoverer is
+// stopped. ctx is NOT canceled when the observer function returns and as such
+// may be used by goroutines started by the observer.
+//
+// The discoverer MAY block on calls to the observer. It is the observer's
+// responsibility to start new goroutines to handle background tasks, as
+// appropriate.
+//
+// Note that it is possible for multiple targets to host the same application.
+type ApplicationObserver func(ctx context.Context, a Application)
 
-// ApplicationObserverError indicates that an application discoverer was stopped
-// because an ApplicationObserver produced an error.
-type ApplicationObserverError struct {
-	Discoverer  *ApplicationDiscoverer
-	Observer    ApplicationObserver
-	Application Application
-	Cause       error
-}
-
-func (e ApplicationObserverError) Unwrap() error {
-	return e.Cause
-}
-
-func (e ApplicationObserverError) Error() string {
-	return fmt.Sprintf(
-		"failure observing '%s' application: %s",
-		e.Application.Identity,
-		e.Cause,
-	)
-}
+// Dialer is a function for connecting to gRPC targets.
+//
+// It matches the signature of grpc.DialContext().
+type Dialer func(context.Context, string, ...grpc.DialOption) (*grpc.ClientConn, error)
 
 // ApplicationDiscoverer is a service that discovers Dogma applications running
 // on gRPC targets.
-//
-// It implements ConnectObserver and forwards to an ApplicationObserver.
 //
 // It discovers applications on gRPC targets that implement the DiscoverAPI as
 // defined in github.com/dogmatiq/interopspec/discoverspec. An implementation of
 // this API is provided by the discoverkit.Server type.
 type ApplicationDiscoverer struct {
-	// Observer is the observer that is invoked when an application becomes
-	// available.
-	Observer ApplicationObserver
+	// Dial is the function used to dial gRPC targets.
+	//
+	// If it is nil, grpc.DialContext() is used.
+	Dial Dialer
 
 	// BackoffStrategy is the strategy that determines when to retry watching a
 	// gRPC target for application availability changes.
@@ -74,25 +61,37 @@ type ApplicationDiscoverer struct {
 
 	// LogError is an optional function that logs errors that occur while
 	// attempting to watch a gRPC target.
-	LogError func(Connection, error)
+	LogError func(Target, error)
 }
 
-// TargetConnected is called when a new connection is established.
+// DiscoverApplications invokes an observer for each Dogma application target
+// that is discovered on a specific gRPC target.
 //
-// ctx is canceled if the target becomes unavailable while TargetConnected() is
-// still executing.
+// It returns a nil error if the target is contactable but it does not implement
+// the DiscoverAPI service. Otherwise, it runs until ctx is canceled.
 //
-// The connection is automatically closed when TargetConnected() returns.
+// Errors that occur while communicating with the target are logged to the
+// LogError function, if present, before retrying. The retry interval is
+// determined by the discoverer's BackoffStrategy.
 //
-// It returns nil if the gRPC target does not implement the DiscoverAPI.
-func (d *ApplicationDiscoverer) TargetConnected(ctx context.Context, c Connection) error {
+// The context passed to the observer is canceled when the application becomes
+// unavailable or the discover is stopped.
+//
+// The discoverer MAY block on calls to the observer. It is the observer's
+// responsibility to start new goroutines to handle background tasks, as
+// appropriate.
+func (d *ApplicationDiscoverer) DiscoverApplications(
+	ctx context.Context,
+	t Target,
+	obs ApplicationObserver,
+) error {
 	ctr := &backoff.Counter{
 		Strategy: d.BackoffStrategy,
 	}
 
 	for {
 		// Attempt to discover applications via the given connection.
-		err := d.watch(ctx, c, ctr)
+		err := d.watch(ctx, ctr, t, obs)
 
 		// If the error is nil it means that the target does not implement the
 		// DiscoverAPI. This is not an error, it simply means that we will never
@@ -101,19 +100,15 @@ func (d *ApplicationDiscoverer) TargetConnected(ctx context.Context, c Connectio
 			return nil
 		}
 
-		// If the observer caused the failure we report that.
-		if _, ok := err.(ApplicationObserverError); ok {
-			return err
+		// If the parent context has been canceled we don't really care what
+		// happens. Bail here before we log it.
+		if ctx.Err() != nil {
+			return ctx.Err()
 		}
 
+		// Log the error, if a log function was provided.
 		if d.LogError != nil {
-			// If the parent context has been canceled we don't really want to
-			// log about that, so we just bail early.
-			if ctx.Err() != nil {
-				return ctx.Err()
-			}
-
-			d.LogError(c, err)
+			d.LogError(t, err)
 		}
 
 		// Finally, we sleep using the backoff counter until it's time to try
@@ -126,21 +121,35 @@ func (d *ApplicationDiscoverer) TargetConnected(ctx context.Context, c Connectio
 
 var emptyWatchApplicationsRequest discoverspec.WatchApplicationsRequest
 
-// watch starts watching the server for announcements about application
+// watch dials a target and watches it for updates to application
 // availability.
 func (d *ApplicationDiscoverer) watch(
 	ctx context.Context,
-	c Connection,
 	ctr *backoff.Counter,
+	t Target,
+	obs ApplicationObserver,
 ) error {
+	// Dial the target using the configurered dialer, or otherwise using the
+	// default gRPC dialer.
+	dial := d.Dial
+	if dial == nil {
+		dial = grpc.DialContext
+	}
+
+	conn, err := dial(ctx, t.Name, t.DialOptions...)
+	if err != nil {
+		return fmt.Errorf("unable to dial target: %w", err)
+	}
+	defer conn.Close()
+
 	// Create a cancellable context specifically to abort the gRPC stream when
-	// this watch attempt is completed.
+	// this function returns. There's no Close() method on a stream, it's
+	// lifetime is tied to the context that created it.
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 
-	stream, err := discoverspec.
-		NewDiscoverAPIClient(c).
-		WatchApplications(ctx, &emptyWatchApplicationsRequest)
+	cli := discoverspec.NewDiscoverAPIClient(conn)
+	stream, err := cli.WatchApplications(ctx, &emptyWatchApplicationsRequest)
 	if err != nil {
 		// Note that the gRPC package does NOT report "unimplemented" errors
 		// here, even though this is where we call the RPC. Instead, they are
@@ -154,30 +163,25 @@ func (d *ApplicationDiscoverer) watch(
 	// until we call stream.Recv().
 	ctr.Reset()
 
-	g, ctx := errgroup.WithContext(ctx)
-
-	g.Go(func() error {
-		// Read the stream within the same group as the observer goroutines.
-		// This ensures both that Wait() always has something to wait for, so
-		// that it doesn't just return immediately, and that the whole group is
-		// shutdown if the reading process itself fails.
-		return d.recv(ctx, stream, c, g)
-	})
-
-	<-ctx.Done()
-
-	return g.Wait()
+	return d.recv(ctx, t, conn, stream, obs)
 }
 
-// recv waits for the next message on the stream and starts/stops
-// application-specific observer goroutines as necessary.
+// recv waits for the next response on the "watch stream" and invokes observers
+// / cancels their contexts as applications become available and unavailable.
 func (d *ApplicationDiscoverer) recv(
 	ctx context.Context,
+	t Target,
+	conn *grpc.ClientConn,
 	stream discoverspec.DiscoverAPI_WatchApplicationsClient,
-	c Connection,
-	g *errgroup.Group,
+	obs ApplicationObserver,
 ) error {
-	known := map[configkit.Identity]context.CancelFunc{}
+	applications := map[configkit.Identity]context.CancelFunc{}
+
+	defer func() {
+		for _, cancel := range applications {
+			cancel()
+		}
+	}()
 
 	for {
 		res, err := stream.Recv()
@@ -207,13 +211,13 @@ func (d *ApplicationDiscoverer) recv(
 			// identities on the same server.
 			if d.LogError != nil {
 				err = fmt.Errorf("invalid application identity: %w", err)
-				d.LogError(c, err)
+				d.LogError(t, err)
 			}
 
 			continue
 		}
 
-		cancel, available := known[id]
+		cancel, available := applications[id]
 
 		if res.Available == available {
 			// There has been no change in availability. Perhaps the server
@@ -226,58 +230,20 @@ func (d *ApplicationDiscoverer) recv(
 			// The application has been marked as unavailable. Cancel its
 			// goroutine and remove it from the list of known applications.
 			cancel()
-			delete(known, id)
+			delete(applications, id)
 			continue
 		}
 
-		// Create a context specific for this application so that we can cancel it
-		// if we receive an unavailable announcement just for this application.
+		// Create a context specific for this application. It will be canceled
+		// if the server sends an "unavailable" response for this application
+		// over the stream.
 		appCtx, cancel := context.WithCancel(ctx)
-		known[id] = cancel
+		applications[id] = cancel
 
-		// Start a new goroutine for the application.
-		g.Go(func() error {
-			defer cancel()
-			return applicationDiscovered(
-				appCtx,
-				d,
-				d.Observer,
-				Application{
-					Identity:   id,
-					Connection: c,
-				},
-			)
+		obs(appCtx, Application{
+			Identity:   id,
+			Target:     t,
+			Connection: conn,
 		})
-	}
-}
-
-// applicationDiscovered calls o.ApplicationDiscovered().
-//
-// If o.ApplicationDiscovered() returns a non-nil error it returns an
-// ApplicationObserverError.
-//
-// If o.ApplicationDiscovered() returns a context.Canceled error *and* ctx is
-// canceled, it returns nil.
-func applicationDiscovered(
-	ctx context.Context,
-	d *ApplicationDiscoverer,
-	o ApplicationObserver,
-	a Application,
-) error {
-	err := o.ApplicationDiscovered(ctx, a)
-
-	if err == nil {
-		return nil
-	}
-
-	if err == context.Canceled && ctx.Err() == context.Canceled {
-		return nil
-	}
-
-	return ApplicationObserverError{
-		Discoverer:  d,
-		Observer:    o,
-		Application: a,
-		Cause:       err,
 	}
 }

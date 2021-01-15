@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"net"
-	"sync/atomic"
 	"time"
 
 	"github.com/dogmatiq/configkit"
@@ -12,34 +11,9 @@ import (
 	"github.com/dogmatiq/interopspec/discoverspec"
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
+	. "github.com/onsi/gomega/gstruct"
 	"google.golang.org/grpc"
 )
-
-var _ = Describe("type ApplicationObserverError", func() {
-	Describe("func Error()", func() {
-		It("provides context about the application", func() {
-			err := ApplicationObserverError{
-				Application: Application{
-					Identity: configkit.MustNewIdentity("<app-name>", "<app-key>"),
-				},
-				Cause: errors.New("<error>"),
-			}
-
-			Expect(err.Error()).To(Equal("failure observing '<app-name>/<app-key>' application: <error>"))
-		})
-	})
-
-	Describe("func Unwrap()", func() {
-		It("unwraps the causal error", func() {
-			cause := errors.New("<error>")
-			err := ApplicationObserverError{
-				Cause: cause,
-			}
-
-			Expect(errors.Is(err, cause)).To(BeTrue())
-		})
-	})
-})
 
 var _ = Describe("type ApplicationDiscoverer", func() {
 	var (
@@ -50,11 +24,8 @@ var _ = Describe("type ApplicationDiscoverer", func() {
 		listener  net.Listener
 		gserver   *grpc.Server
 		target    Target
-		gconn     *grpc.ClientConn
-		conn      Connection
 		responses chan *discoverspec.WatchApplicationsResponse
 
-		obs        *applicationObserverStub
 		discoverer *ApplicationDiscoverer
 	)
 
@@ -98,27 +69,11 @@ var _ = Describe("type ApplicationDiscoverer", func() {
 			},
 		}
 
-		gconn, err = grpc.Dial(target.Name, target.DialOptions...)
-		Expect(err).ShouldNot(HaveOccurred())
-
-		conn = Connection{
-			ClientConnInterface: gconn,
-			Target:              target,
-		}
-
-		obs = &applicationObserverStub{}
-
-		discoverer = &ApplicationDiscoverer{
-			Observer: obs,
-		}
+		discoverer = &ApplicationDiscoverer{}
 	})
 
 	AfterEach(func() {
 		cancel()
-
-		if gconn != nil {
-			gconn.Close()
-		}
 
 		if gserver != nil {
 			gserver.Stop()
@@ -129,14 +84,14 @@ var _ = Describe("type ApplicationDiscoverer", func() {
 		}
 	})
 
-	Describe("func TargetConnected()", func() {
+	Describe("func DiscoverApplications()", func() {
 		When("the server implements the discovery API", func() {
 			BeforeEach(func() {
 				discoverspec.RegisterDiscoverAPIServer(gserver, server)
 				go gserver.Serve(listener)
 			})
 
-			When("an app becomes available", func() {
+			When("an application becomes available", func() {
 				BeforeEach(func() {
 					go func() {
 						res := &discoverspec.WatchApplicationsResponse{
@@ -155,176 +110,160 @@ var _ = Describe("type ApplicationDiscoverer", func() {
 				})
 
 				It("invokes the observer", func() {
-					obs.ApplicationDiscoveredFunc = func(
-						_ context.Context,
-						app Application,
-					) error {
-						defer cancel()
-						defer GinkgoRecover()
+					err := discoverer.DiscoverApplications(
+						ctx,
+						target,
+						func(
+							_ context.Context,
+							app Application,
+						) {
+							defer cancel()
 
-						Expect(app).To(Equal(
-							Application{
-								Identity:   configkit.MustNewIdentity("<app-name>", "<app-key>"),
-								Connection: conn,
-							},
-						))
-
-						return nil
-					}
-
-					err := discoverer.TargetConnected(ctx, conn)
-					Expect(err).To(Equal(context.Canceled))
-				})
-
-				It("returns an error when the observer returns an error", func() {
-					cause := errors.New("<error>")
-
-					obs.ApplicationDiscoveredFunc = func(
-						context.Context,
-						Application,
-					) error {
-						return cause
-					}
-
-					err := discoverer.TargetConnected(ctx, conn)
-					Expect(err).To(Equal(
-						ApplicationObserverError{
-							Discoverer: discoverer,
-							Observer:   obs,
-							Application: Application{
-								Identity:   configkit.MustNewIdentity("<app-name>", "<app-key>"),
-								Connection: conn,
-							},
-							Cause: cause,
+							Expect(app).To(MatchAllFields(
+								Fields{
+									"Identity":   Equal(configkit.MustNewIdentity("<app-name>", "<app-key>")),
+									"Target":     Equal(target),
+									"Connection": Not(BeNil()),
+								},
+							))
 						},
-					))
+					)
+
+					Expect(err).To(Equal(context.Canceled))
 				})
 
 				It("cancels the observer context when the server goes offline", func() {
-					obs.ApplicationDiscoveredFunc = func(
-						ctx context.Context,
-						a Application,
-					) error {
-						// Stop the gRPC server.
-						gserver.Stop()
+					done := make(chan struct{})
 
-						// Then wait for the application-specific context to be
-						// done, either because it's canceled properly, or
-						// because the test times out.
-						<-ctx.Done()
+					go discoverer.DiscoverApplications(
+						ctx,
+						target,
+						func(
+							appCtx context.Context,
+							_ Application,
+						) {
+							gserver.Stop()
 
-						// Then we cancel the test's context. If everything is
-						// behaving correctly this should happen BEFORE the test
-						// times out, so we see a context.Canceled error and not
-						// DeadlineExceeded.
-						cancel()
+							go func() {
+								<-appCtx.Done()
+								close(done)
+							}()
+						},
+					)
 
-						return ctx.Err()
+					select {
+					case <-done:
+					case <-ctx.Done():
+						Expect(ctx.Err()).ShouldNot(HaveOccurred())
 					}
-
-					err := discoverer.TargetConnected(ctx, conn)
-					Expect(err).To(Equal(context.Canceled))
 				})
 
 				It("cancels the observer context when the application becomes unavailable", func() {
-					obs.ApplicationDiscoveredFunc = func(
-						ctx context.Context,
-						app Application,
-					) error {
-						// Write the "unavailable" response.
-						res := &discoverspec.WatchApplicationsResponse{
-							Identity: &discoverspec.Identity{
-								Name: app.Identity.Name,
-								Key:  app.Identity.Key,
-							},
-							Available: false,
-						}
+					done := make(chan struct{})
 
-						select {
-						case <-ctx.Done():
-						case responses <- res:
-						}
-
-						// Then wait for the application-specific context to be
-						// done, either because it's canceled properly, or
-						// because the test times out.
-						<-ctx.Done()
-
-						// Then we cancel the test's context. If everything is
-						// behaving correctly this should happen BEFORE the test
-						// times out, so we see a context.Canceled error and not
-						// DeadlineExceeded.
-						cancel()
-
-						return ctx.Err()
-					}
-
-					err := discoverer.TargetConnected(ctx, conn)
-					Expect(err).To(Equal(context.Canceled))
-				})
-
-				It("cancels the observer context when the server ends the stream", func() {
-					obs.ApplicationDiscoveredFunc = func(
-						ctx context.Context,
-						app Application,
-					) error {
-						// Close the "responses" channel which causes the server
-						// to return from the WatchApplications() method.
-						close(responses)
-
-						// Then wait for the application-specific context to be
-						// done, either because it's canceled properly, or
-						// because the test times out.
-						<-ctx.Done()
-
-						// Then we cancel the test's context. If everything is
-						// behaving correctly this should happen BEFORE the test
-						// times out, so we see a context.Canceled error and not
-						// DeadlineExceeded.
-						cancel()
-
-						return ctx.Err()
-					}
-
-					err := discoverer.TargetConnected(ctx, conn)
-					Expect(err).To(Equal(context.Canceled))
-				})
-
-				It("does not invoke the observer if the server sends a duplicate response", func() {
-					var count uint32
-
-					obs.ApplicationDiscoveredFunc = func(
-						_ context.Context,
-						app Application,
-					) error {
-						// Send the duplicate response the first time
-						// ApplicationDiscovered() is called.
-						if atomic.AddUint32(&count, 1) == 1 {
+					go discoverer.DiscoverApplications(
+						ctx,
+						target,
+						func(
+							appCtx context.Context,
+							app Application,
+						) {
+							// Write the "unavailable" response.
 							res := &discoverspec.WatchApplicationsResponse{
 								Identity: &discoverspec.Identity{
-									Name: "<app-name>",
-									Key:  "<app-key>",
+									Name: app.Identity.Name,
+									Key:  app.Identity.Key,
 								},
-								Available: true,
+								Available: false,
 							}
 
 							select {
 							case <-ctx.Done():
-								return ctx.Err()
 							case responses <- res:
-								return nil
 							}
-						}
 
-						// If we've already been called return an error.
-						return errors.New("unexpected call")
+							go func() {
+								<-appCtx.Done()
+								close(done)
+							}()
+						},
+					)
+
+					select {
+					case <-done:
+					case <-ctx.Done():
+						Expect(ctx.Err()).ShouldNot(HaveOccurred())
 					}
+				})
+
+				It("cancels the observer context when the server ends the stream", func() {
+					done := make(chan struct{})
+
+					go discoverer.DiscoverApplications(
+						ctx,
+						target,
+						func(
+							appCtx context.Context,
+							app Application,
+						) {
+							// Close the "responses" channel which causes the
+							// server to return from the WatchApplications()
+							// method.
+							close(responses)
+
+							go func() {
+								<-appCtx.Done()
+								close(done)
+							}()
+						},
+					)
+
+					select {
+					case <-done:
+					case <-ctx.Done():
+						Expect(ctx.Err()).ShouldNot(HaveOccurred())
+					}
+				})
+
+				It("does not invoke the observer if the server sends a duplicate response", func() {
+					count := 0
+
+					err := discoverer.DiscoverApplications(
+						ctx,
+						target,
+						func(
+							appCtx context.Context,
+							app Application,
+						) {
+							if count == 0 {
+								// Send the duplicate response the first time
+								// ApplicationDiscovered() is called.
+								go func() {
+									res := &discoverspec.WatchApplicationsResponse{
+										Identity: &discoverspec.Identity{
+											Name: "<app-name>",
+											Key:  "<app-key>",
+										},
+										Available: true,
+									}
+
+									select {
+									case <-ctx.Done():
+									case responses <- res:
+									}
+								}()
+							}
+
+							count++
+						},
+					)
 
 					// There's not much we can "expect" here other than that the
 					// test times out, since we're testing that something
-					// DOESN'T happen in its own goroutine.
-					err := discoverer.TargetConnected(ctx, conn)
+					// DOESN'T happen but we have no way to detect when it WOULD
+					// have happened if the system was behaving incorrectly.
 					Expect(err).To(Equal(context.DeadlineExceeded))
+					Expect(count).To(Equal(1))
 				})
 			})
 
@@ -344,30 +283,32 @@ var _ = Describe("type ApplicationDiscoverer", func() {
 				})
 
 				It("does not invoke the observer", func() {
-					obs.ApplicationDiscoveredFunc = func(
-						context.Context,
-						Application,
-					) error {
-						return errors.New("unexpected call")
-					}
+					err := discoverer.DiscoverApplications(
+						ctx,
+						target,
+						func(
+							context.Context,
+							Application,
+						) {
+							Fail("unexpected call")
+						},
+					)
 
-					err := discoverer.TargetConnected(ctx, conn)
 					Expect(err).To(Equal(context.DeadlineExceeded))
 				})
 
 				It("logs the error", func() {
 					discoverer.LogError = func(
-						c Connection,
+						t Target,
 						err error,
 					) {
-						defer GinkgoRecover()
 						defer cancel()
 
-						Expect(c).To(Equal(conn))
+						Expect(t).To(Equal(target))
 						Expect(err).To(MatchError(`invalid application identity: invalid name "", names must be non-empty, printable UTF-8 strings with no whitespace`))
 					}
 
-					err := discoverer.TargetConnected(ctx, conn)
+					err := discoverer.DiscoverApplications(ctx, target, nil)
 					Expect(err).To(Equal(context.Canceled))
 				})
 			})
@@ -384,17 +325,39 @@ var _ = Describe("type ApplicationDiscoverer", func() {
 
 				It("logs the error", func() {
 					discoverer.LogError = func(
-						c Connection,
+						t Target,
 						err error,
 					) {
-						defer GinkgoRecover()
 						defer cancel()
 
-						Expect(c).To(Equal(conn))
+						Expect(t).To(Equal(target))
 						Expect(err).To(MatchError(`unable to read from stream: rpc error: code = Unknown desc = <error>`))
 					}
 
-					err := discoverer.TargetConnected(ctx, conn)
+					err := discoverer.DiscoverApplications(ctx, target, nil)
+					Expect(err).To(Equal(context.Canceled))
+				})
+			})
+
+			When("the server can not be dialed", func() {
+				BeforeEach(func() {
+					// Remove the WithInsecure() option, which will cause the
+					// dialer to fail.
+					target.DialOptions = nil
+				})
+
+				It("logs the error", func() {
+					discoverer.LogError = func(
+						t Target,
+						err error,
+					) {
+						defer cancel()
+
+						Expect(t).To(Equal(target))
+						Expect(err).To(MatchError(`unable to dial target: grpc: no transport security set (use grpc.WithInsecure() explicitly or set credentials)`))
+					}
+
+					err := discoverer.DiscoverApplications(ctx, target, nil)
 					Expect(err).To(Equal(context.Canceled))
 				})
 			})
@@ -406,27 +369,12 @@ var _ = Describe("type ApplicationDiscoverer", func() {
 			})
 
 			It("returns nil immediately", func() {
-				err := discoverer.TargetConnected(ctx, conn)
+				err := discoverer.DiscoverApplications(ctx, target, nil)
 				Expect(err).ShouldNot(HaveOccurred())
 			})
 		})
 	})
 })
-
-// applicationObserverStub is a test implementation of the ApplicationObserver
-// interface.
-type applicationObserverStub struct {
-	ApplicationDiscoveredFunc func(context.Context, Application) error
-}
-
-// ApplicationDiscovered calls o.ApplicationDiscoveredFunc(ctx, a) if it is non-nil.
-func (o *applicationObserverStub) ApplicationDiscovered(ctx context.Context, a Application) error {
-	if o.ApplicationDiscoveredFunc != nil {
-		return o.ApplicationDiscoveredFunc(ctx, a)
-	}
-
-	return nil
-}
 
 type serverStub struct {
 	WatchApplicationsFunc func(*discoverspec.WatchApplicationsRequest, discoverspec.DiscoverAPI_WatchApplicationsServer) error
