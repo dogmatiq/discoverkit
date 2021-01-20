@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"net"
+	"strings"
 	"time"
 
 	. "github.com/dogmatiq/discoverkit"
@@ -58,8 +59,8 @@ var _ = Describe("type DNSTargetDiscoverer", func() {
 
 			Expect(err).To(Equal(context.Canceled))
 			Expect(targets).To(ConsistOf(
-				Target{Name: "<addr-1>"},
-				Target{Name: "<addr-2>"},
+				Target{Name: "<addr-1>:50555"},
+				Target{Name: "<addr-2>:50555"},
 			))
 		})
 
@@ -84,7 +85,7 @@ var _ = Describe("type DNSTargetDiscoverer", func() {
 					targetCtx context.Context,
 					t Target,
 				) {
-					if t.Name == "<addr-1>" {
+					if strings.Contains(t.Name, "<addr-1>") {
 						go func() {
 							<-targetCtx.Done()
 							close(done)
@@ -151,8 +152,8 @@ var _ = Describe("type DNSTargetDiscoverer", func() {
 					cancel()
 					Expect(t.Name).To(
 						Or(
-							Equal("127.0.0.1"),
-							Equal("::1"),
+							Equal("127.0.0.1:50555"),
+							Equal("[::1]:50555"),
 						),
 					)
 				},

@@ -31,8 +31,8 @@ type DNSTargetDiscoverer struct {
 	// an IP address.
 	//
 	// If NewTargets is nil the discoverer constructs a single Target for each
-	// discovered address. The target name is the discovered address and no
-	// explicit port is specified.
+	// discovered address. The target name is built using the discovered address
+	// as the host and the DefaultGRPCPort constant for the port.
 	NewTargets func(ctx context.Context, addr string) (targets []Target, err error)
 
 	// LookupHost is the function used to query the host.
@@ -174,6 +174,8 @@ func (d *DNSTargetDiscoverer) newTargets(ctx context.Context, addr string) ([]Ta
 	}
 
 	return []Target{
-		{Name: addr},
+		{
+			Name: net.JoinHostPort(addr, DefaultGRPCPort),
+		},
 	}, nil
 }

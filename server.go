@@ -7,6 +7,12 @@ import (
 	"github.com/dogmatiq/interopspec/discoverspec"
 )
 
+const (
+	// DefaultGRPCPort is the default TCP port used by servers that implement
+	// the APIs in interopspec, in particular the DiscoverAPI.
+	DefaultGRPCPort = "50555"
+)
+
 // Server is an implementation of discoverspec.DiscoverAPIServer.
 type Server struct {
 	m sync.Mutex
