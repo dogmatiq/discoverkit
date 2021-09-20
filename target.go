@@ -2,7 +2,9 @@ package discoverkit
 
 import (
 	"context"
+	"net"
 
+	"github.com/dogmatiq/configkit"
 	"google.golang.org/grpc"
 )
 
@@ -30,7 +32,8 @@ type Target struct {
 // appropriate.
 type TargetObserver func(ctx context.Context, t Target)
 
-// TargetDiscoverer is an interface for services that discover gRPC targets.
+// TargetDiscoverer is an interface for services that advertise and discover
+// gRPC targets.
 //
 // A "target" is some endpoint that can be dialed using gRPC. It is typically a
 // single gRPC server, but may be anything that can be referred to by a "name"
@@ -48,4 +51,17 @@ type TargetDiscoverer interface {
 	// responsibility to start new goroutines to handle background tasks, as
 	// appropriate.
 	DiscoverTargets(ctx context.Context, obs TargetObserver) error
+
+	// AdvertiseTarget advertises a target so that it may be discovered by a
+	// TargetDiscoverer.
+	//
+	// addr is the address on which the gRPC server accepts connections.
+	//
+	// It runs until ctx is canceled or an error occurs. If this discovery
+	// method does not require advertisement, it returns nil immediately.
+	AdvertiseTarget(
+		ctx context.Context,
+		addr net.Addr,
+		applications []configkit.Identity,
+	) error
 }

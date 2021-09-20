@@ -6,6 +6,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/dogmatiq/configkit"
 	"github.com/dogmatiq/linger"
 )
 
@@ -87,6 +88,21 @@ func (d *DNSTargetDiscoverer) DiscoverTargets(ctx context.Context, obs TargetObs
 			return err
 		}
 	}
+}
+
+// AdvertiseTarget advertises a target so that it may be discovered by a
+// TargetDiscoverer.
+//
+// addr is the address on which the gRPC server accepts connections.
+//
+// This discovery method does not support advertising, nil is returned
+// immediately.
+func (d *DNSTargetDiscoverer) AdvertiseTarget(
+	ctx context.Context,
+	addr net.Addr,
+	applications []configkit.Identity,
+) error {
+	return nil
 }
 
 // sync synchronizes the state of running observers based on a new set of DNS

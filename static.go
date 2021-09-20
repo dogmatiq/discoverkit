@@ -2,6 +2,9 @@ package discoverkit
 
 import (
 	"context"
+	"net"
+
+	"github.com/dogmatiq/configkit"
 )
 
 // StaticTargetDiscoverer is a TargetDiscoverer that always "discovers" a fixed
@@ -26,4 +29,19 @@ func (d StaticTargetDiscoverer) DiscoverTargets(ctx context.Context, obs TargetO
 	<-ctx.Done()
 
 	return ctx.Err()
+}
+
+// AdvertiseTarget advertises a target so that it may be discovered by a
+// TargetDiscoverer.
+//
+// addr is the address on which the gRPC server accepts connections.
+//
+// This discovery method does not require advertising, nil is returned
+// immediately.
+func (d StaticTargetDiscoverer) AdvertiseTarget(
+	ctx context.Context,
+	addr net.Addr,
+	applications []configkit.Identity,
+) error {
+	return nil
 }
