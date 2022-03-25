@@ -11,6 +11,7 @@ import (
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/credentials/insecure"
 )
 
 var _ = Describe("type Server", func() {
@@ -47,7 +48,9 @@ var _ = Describe("type Server", func() {
 
 		conn, err = grpc.Dial(
 			listener.Addr().String(),
-			grpc.WithInsecure(),
+			grpc.WithTransportCredentials(
+				insecure.NewCredentials(),
+			),
 		)
 		Expect(err).ShouldNot(HaveOccurred())
 
