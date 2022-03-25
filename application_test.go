@@ -13,6 +13,7 @@ import (
 	. "github.com/onsi/gomega"
 	. "github.com/onsi/gomega/gstruct"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/credentials/insecure"
 )
 
 var _ = Describe("type ApplicationDiscoverer", func() {
@@ -65,7 +66,9 @@ var _ = Describe("type ApplicationDiscoverer", func() {
 		target = Target{
 			Name: listener.Addr().String(),
 			DialOptions: []grpc.DialOption{
-				grpc.WithInsecure(),
+				grpc.WithTransportCredentials(
+					insecure.NewCredentials(),
+				),
 			},
 		}
 
@@ -341,8 +344,8 @@ var _ = Describe("type ApplicationDiscoverer", func() {
 
 			When("the server can not be dialed", func() {
 				BeforeEach(func() {
-					// Remove the WithInsecure() option, which will cause the
-					// dialer to fail.
+					// Remove the insecure transport credentials option, which
+					// will cause the dialer to fail.
 					target.DialOptions = nil
 				})
 
@@ -354,7 +357,7 @@ var _ = Describe("type ApplicationDiscoverer", func() {
 						defer cancel()
 
 						Expect(t).To(Equal(target))
-						Expect(err).To(MatchError(`unable to dial target: grpc: no transport security set (use grpc.WithInsecure() explicitly or set credentials)`))
+						Expect(err).To(MatchError(`unable to dial target: grpc: no transport security set (use grpc.WithTransportCredentials(insecure.NewCredentials()) explicitly or set credentials)`))
 					}
 
 					err := discoverer.DiscoverApplications(ctx, target, nil)
