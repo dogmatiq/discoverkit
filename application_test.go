@@ -9,7 +9,7 @@ import (
 	"github.com/dogmatiq/configkit"
 	. "github.com/dogmatiq/discoverkit"
 	"github.com/dogmatiq/interopspec/discoverspec"
-	. "github.com/onsi/ginkgo"
+	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	. "github.com/onsi/gomega/gstruct"
 	"google.golang.org/grpc"
@@ -85,6 +85,8 @@ var _ = Describe("type ApplicationDiscoverer", func() {
 		if listener != nil {
 			listener.Close()
 		}
+
+		<-ctx.Done()
 	})
 
 	Describe("func DiscoverApplications()", func() {
