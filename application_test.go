@@ -32,6 +32,7 @@ var _ = Describe("type ApplicationDiscoverer", func() {
 
 	BeforeEach(func() {
 		ctx, cancel = context.WithTimeout(context.Background(), 200*time.Millisecond)
+		DeferCleanup(cancel)
 
 		responses = make(chan *discoverspec.WatchApplicationsResponse)
 
@@ -60,8 +61,14 @@ var _ = Describe("type ApplicationDiscoverer", func() {
 		var err error
 		listener, err = net.Listen("tcp", ":")
 		Expect(err).ShouldNot(HaveOccurred())
+		DeferCleanup(func() {
+			listener.Close()
+		})
 
 		gserver = grpc.NewServer()
+		DeferCleanup(func() {
+			gserver.Stop()
+		})
 
 		target = Target{
 			Name: listener.Addr().String(),
@@ -75,30 +82,28 @@ var _ = Describe("type ApplicationDiscoverer", func() {
 		discoverer = &ApplicationDiscoverer{}
 	})
 
-	AfterEach(func() {
-		cancel()
-
-		if gserver != nil {
-			gserver.Stop()
-		}
-
-		if listener != nil {
-			listener.Close()
-		}
-
-		<-ctx.Done()
-	})
-
 	Describe("func DiscoverApplications()", func() {
 		When("the server implements the discovery API", func() {
 			BeforeEach(func() {
 				discoverspec.RegisterDiscoverAPIServer(gserver, server)
-				go gserver.Serve(listener)
+
+				done := make(chan struct{})
+				go func() {
+					defer close(done)
+					gserver.Serve(listener)
+				}()
+
+				DeferCleanup(func() {
+					listener.Close()
+					<-done
+				})
 			})
 
 			When("an application becomes available", func() {
 				BeforeEach(func() {
+					done := make(chan struct{})
 					go func() {
+						defer close(done)
 						res := &discoverspec.WatchApplicationsResponse{
 							Identity: &discoverspec.Identity{
 								Name: "<app-name>",
@@ -112,6 +117,10 @@ var _ = Describe("type ApplicationDiscoverer", func() {
 						case responses <- res:
 						}
 					}()
+
+					DeferCleanup(func() {
+						<-done
+					})
 				})
 
 				It("invokes the observer", func() {
@@ -138,26 +147,34 @@ var _ = Describe("type ApplicationDiscoverer", func() {
 				})
 
 				It("cancels the observer context when the server goes offline", func() {
+					canceled := make(chan struct{})
 					done := make(chan struct{})
+					defer func() {
+						<-done
+					}()
 
-					go discoverer.DiscoverApplications(
-						ctx,
-						target,
-						func(
-							appCtx context.Context,
-							_ Application,
-						) {
-							gserver.Stop()
+					go func() {
+						defer close(done)
 
-							go func() {
-								<-appCtx.Done()
-								close(done)
-							}()
-						},
-					)
+						discoverer.DiscoverApplications(
+							ctx,
+							target,
+							func(
+								appCtx context.Context,
+								_ Application,
+							) {
+								gserver.Stop()
+
+								go func() {
+									<-appCtx.Done()
+									close(canceled)
+								}()
+							},
+						)
+					}()
 
 					select {
-					case <-done:
+					case <-canceled:
 					case <-ctx.Done():
 						Expect(ctx.Err()).ShouldNot(HaveOccurred())
 					}
@@ -165,37 +182,46 @@ var _ = Describe("type ApplicationDiscoverer", func() {
 
 				It("cancels the observer context when the application becomes unavailable", func() {
 					done := make(chan struct{})
+					defer func() {
+						<-done
+					}()
 
-					go discoverer.DiscoverApplications(
-						ctx,
-						target,
-						func(
-							appCtx context.Context,
-							app Application,
-						) {
-							// Write the "unavailable" response.
-							res := &discoverspec.WatchApplicationsResponse{
-								Identity: &discoverspec.Identity{
-									Name: app.Identity.Name,
-									Key:  app.Identity.Key,
-								},
-								Available: false,
-							}
+					canceled := make(chan struct{})
 
-							select {
-							case <-ctx.Done():
-							case responses <- res:
-							}
+					go func() {
+						defer close(done)
 
-							go func() {
-								<-appCtx.Done()
-								close(done)
-							}()
-						},
-					)
+						discoverer.DiscoverApplications(
+							ctx,
+							target,
+							func(
+								appCtx context.Context,
+								app Application,
+							) {
+								// Write the "unavailable" response.
+								res := &discoverspec.WatchApplicationsResponse{
+									Identity: &discoverspec.Identity{
+										Name: app.Identity.Name,
+										Key:  app.Identity.Key,
+									},
+									Available: false,
+								}
+
+								select {
+								case <-ctx.Done():
+								case responses <- res:
+								}
+
+								go func() {
+									<-appCtx.Done()
+									close(canceled)
+								}()
+							},
+						)
+					}()
 
 					select {
-					case <-done:
+					case <-canceled:
 					case <-ctx.Done():
 						Expect(ctx.Err()).ShouldNot(HaveOccurred())
 					}
@@ -203,28 +229,37 @@ var _ = Describe("type ApplicationDiscoverer", func() {
 
 				It("cancels the observer context when the server ends the stream", func() {
 					done := make(chan struct{})
+					defer func() {
+						<-done
+					}()
 
-					go discoverer.DiscoverApplications(
-						ctx,
-						target,
-						func(
-							appCtx context.Context,
-							app Application,
-						) {
-							// Close the "responses" channel which causes the
-							// server to return from the WatchApplications()
-							// method.
-							close(responses)
+					canceled := make(chan struct{})
 
-							go func() {
-								<-appCtx.Done()
-								close(done)
-							}()
-						},
-					)
+					go func() {
+						defer close(done)
+
+						discoverer.DiscoverApplications(
+							ctx,
+							target,
+							func(
+								appCtx context.Context,
+								app Application,
+							) {
+								// Close the "responses" channel which causes the
+								// server to return from the WatchApplications()
+								// method.
+								close(responses)
+
+								go func() {
+									<-appCtx.Done()
+									close(canceled)
+								}()
+							},
+						)
+					}()
 
 					select {
-					case <-done:
+					case <-canceled:
 					case <-ctx.Done():
 						Expect(ctx.Err()).ShouldNot(HaveOccurred())
 					}
@@ -274,7 +309,11 @@ var _ = Describe("type ApplicationDiscoverer", func() {
 
 			When("the server sends an invalid identity", func() {
 				BeforeEach(func() {
+					done := make(chan struct{})
+
 					go func() {
+						defer close(done)
+
 						res := &discoverspec.WatchApplicationsResponse{
 							Identity:  &discoverspec.Identity{}, // note: empty identity is invalid
 							Available: true,
@@ -285,6 +324,10 @@ var _ = Describe("type ApplicationDiscoverer", func() {
 						case responses <- res:
 						}
 					}()
+
+					DeferCleanup(func() {
+						<-done
+					})
 				})
 
 				It("does not invoke the observer", func() {
@@ -370,7 +413,16 @@ var _ = Describe("type ApplicationDiscoverer", func() {
 
 		When("the server does not implement the discovery API", func() {
 			BeforeEach(func() {
-				go gserver.Serve(listener)
+				done := make(chan struct{})
+				go func() {
+					defer close(done)
+					gserver.Serve(listener)
+				}()
+
+				DeferCleanup(func() {
+					listener.Close()
+					<-done
+				})
 			})
 
 			It("returns nil immediately", func() {
