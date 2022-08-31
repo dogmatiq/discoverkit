@@ -67,7 +67,7 @@ var _ = Describe("type ApplicationDiscoverer", func() {
 
 		gserver = grpc.NewServer()
 		DeferCleanup(func() {
-			gserver.Stop()
+			gserver.GracefulStop()
 		})
 
 		target = Target{
