@@ -4,7 +4,7 @@ go 1.17
 
 require (
 	github.com/dogmatiq/configkit v0.11.1
-	github.com/dogmatiq/interopspec v0.5.1
+	github.com/dogmatiq/interopspec v0.5.2
 	github.com/dogmatiq/linger v0.2.1
 	github.com/onsi/ginkgo/v2 v2.1.6
 	github.com/onsi/gomega v1.20.2
