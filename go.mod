@@ -7,7 +7,7 @@ require (
 	github.com/dogmatiq/interopspec v0.5.2
 	github.com/dogmatiq/linger v0.2.1
 	github.com/onsi/ginkgo/v2 v2.2.0
-	github.com/onsi/gomega v1.21.1
+	github.com/onsi/gomega v1.22.0
 	google.golang.org/grpc v1.49.0
 )
 
