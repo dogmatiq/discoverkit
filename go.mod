@@ -8,7 +8,7 @@ require (
 	github.com/dogmatiq/linger v0.2.1
 	github.com/onsi/ginkgo/v2 v2.3.1
 	github.com/onsi/gomega v1.22.1
-	google.golang.org/grpc v1.50.0
+	google.golang.org/grpc v1.50.1
 )
 
 require (
