@@ -1,6 +1,6 @@
 module github.com/dogmatiq/discoverkit
 
-go 1.17
+go 1.19
 
 require (
 	github.com/dogmatiq/configkit v0.11.1
