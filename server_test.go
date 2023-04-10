@@ -31,9 +31,9 @@ var _ = Describe("type Server", func() {
 	BeforeEach(func() {
 		ctx, cancel = context.WithTimeout(context.Background(), 100*time.Millisecond)
 
-		app1 = configkit.MustNewIdentity("<app-1-name>", "<app-1-key>")
-		app2 = configkit.MustNewIdentity("<app-2-name>", "<app-2-key>")
-		app3 = configkit.MustNewIdentity("<app-3-name>", "<app-3-key>")
+		app1 = configkit.MustNewIdentity("<app-1-name>", "a2b30343-b86c-485c-94e0-de84dda069a7")
+		app2 = configkit.MustNewIdentity("<app-2-name>", "e7f11e2c-791f-4083-8c71-6aa966fc3db1")
+		app3 = configkit.MustNewIdentity("<app-3-name>", "4edad1cb-5aa6-4984-97fc-3fb7b187ffc7")
 
 		server = &Server{}
 
@@ -83,7 +83,7 @@ var _ = Describe("type Server", func() {
 			m, err := stream.Recv()
 			Expect(err).ShouldNot(HaveOccurred())
 			Expect(m.Identity.Name).To(Equal("<app-1-name>"))
-			Expect(m.Identity.Key).To(Equal("<app-1-key>"))
+			Expect(m.Identity.Key).To(Equal("a2b30343-b86c-485c-94e0-de84dda069a7"))
 			Expect(m.Available).To(BeTrue())
 		})
 
@@ -99,7 +99,7 @@ var _ = Describe("type Server", func() {
 			m, err := stream.Recv()
 			Expect(err).ShouldNot(HaveOccurred())
 			Expect(m.Identity.Name).To(Equal("<app-1-name>"))
-			Expect(m.Identity.Key).To(Equal("<app-1-key>"))
+			Expect(m.Identity.Key).To(Equal("a2b30343-b86c-485c-94e0-de84dda069a7"))
 			Expect(m.Available).To(BeTrue())
 		})
 
@@ -159,7 +159,7 @@ var _ = Describe("type Server", func() {
 			m, err := stream.Recv()
 			Expect(err).ShouldNot(HaveOccurred())
 			Expect(m.Identity.Name).To(Equal("<app-1-name>"))
-			Expect(m.Identity.Key).To(Equal("<app-1-key>"))
+			Expect(m.Identity.Key).To(Equal("a2b30343-b86c-485c-94e0-de84dda069a7"))
 			Expect(m.Available).To(BeFalse())
 		})
 
