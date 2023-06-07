@@ -16,6 +16,8 @@ import (
 	"google.golang.org/grpc/credentials/insecure"
 )
 
+const appKey = "420a8fe8-0c57-44e0-8332-d5c5f93a63fc"
+
 var _ = Describe("type ApplicationDiscoverer", func() {
 	var (
 		ctx    context.Context
@@ -107,7 +109,7 @@ var _ = Describe("type ApplicationDiscoverer", func() {
 						res := &discoverspec.WatchApplicationsResponse{
 							Identity: &discoverspec.Identity{
 								Name: "<app-name>",
-								Key:  "<app-key>",
+								Key:  appKey,
 							},
 							Available: true,
 						}
@@ -135,7 +137,7 @@ var _ = Describe("type ApplicationDiscoverer", func() {
 
 							Expect(app).To(MatchAllFields(
 								Fields{
-									"Identity":   Equal(configkit.MustNewIdentity("<app-name>", "<app-key>")),
+									"Identity":   Equal(configkit.MustNewIdentity("<app-name>", appKey)),
 									"Target":     Equal(target),
 									"Connection": Not(BeNil()),
 								},
@@ -282,7 +284,7 @@ var _ = Describe("type ApplicationDiscoverer", func() {
 									res := &discoverspec.WatchApplicationsResponse{
 										Identity: &discoverspec.Identity{
 											Name: "<app-name>",
-											Key:  "<app-key>",
+											Key:  appKey,
 										},
 										Available: true,
 									}
