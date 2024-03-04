@@ -6,7 +6,7 @@ require (
 	github.com/dogmatiq/configkit v0.12.2
 	github.com/dogmatiq/interopspec v0.5.3
 	github.com/dogmatiq/linger v1.1.0
-	github.com/onsi/ginkgo/v2 v2.15.0
+	github.com/onsi/ginkgo/v2 v2.16.0
 	github.com/onsi/gomega v1.31.1
 	google.golang.org/grpc v1.62.0
 )
@@ -14,7 +14,7 @@ require (
 require (
 	github.com/dogmatiq/dogma v0.12.1 // indirect
 	github.com/dogmatiq/iago v0.4.0 // indirect
-	github.com/go-logr/logr v1.3.0 // indirect
+	github.com/go-logr/logr v1.4.1 // indirect
 	github.com/go-task/slim-sprig v0.0.0-20230315185526-52ccab3ef572 // indirect
 	github.com/golang/protobuf v1.5.3 // indirect
 	github.com/google/go-cmp v0.6.0 // indirect
