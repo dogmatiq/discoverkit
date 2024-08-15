@@ -3,7 +3,7 @@ module github.com/dogmatiq/discoverkit
 go 1.21
 
 require (
-	github.com/dogmatiq/configkit v0.13.2
+	github.com/dogmatiq/configkit v0.13.3
 	github.com/dogmatiq/interopspec v0.5.4
 	github.com/dogmatiq/linger v1.1.0
 	github.com/onsi/ginkgo/v2 v2.20.0
