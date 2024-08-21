@@ -8,7 +8,7 @@ require (
 	github.com/dogmatiq/configkit v0.13.6
 	github.com/dogmatiq/interopspec v0.5.4
 	github.com/dogmatiq/linger v1.1.0
-	github.com/onsi/ginkgo/v2 v2.20.0
+	github.com/onsi/ginkgo/v2 v2.20.1
 	github.com/onsi/gomega v1.34.1
 	google.golang.org/grpc v1.65.0
 )
