@@ -5,7 +5,7 @@ go 1.22
 toolchain go1.22.5
 
 require (
-	github.com/dogmatiq/configkit v0.13.6
+	github.com/dogmatiq/configkit v0.13.7
 	github.com/dogmatiq/interopspec v0.5.4
 	github.com/dogmatiq/linger v1.1.0
 	github.com/onsi/ginkgo/v2 v2.20.1
@@ -14,7 +14,7 @@ require (
 )
 
 require (
-	github.com/dogmatiq/dogma v0.14.0 // indirect
+	github.com/dogmatiq/dogma v0.14.2 // indirect
 	github.com/dogmatiq/iago v0.4.0 // indirect
 	github.com/go-logr/logr v1.4.2 // indirect
 	github.com/go-task/slim-sprig/v3 v3.0.0 // indirect
